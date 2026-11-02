@@ -1,0 +1,4 @@
+# Wird bei jedem Lauf neu erzeugt und direkt veröffentlicht, nicht ins Repository
+docs/data/
+__pycache__/
+.claude/

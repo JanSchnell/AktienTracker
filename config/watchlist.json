@@ -1,0 +1,44 @@
+{
+  "_hinweis": "Ticker-Symbole wie auf finance.yahoo.com. Deutsche Börse = .DE, Amsterdam = .AS, Paris = .PA, Kopenhagen = .CO, Madrid = .MC. US-Aktien ohne Endung. 'typ' ist 'etf' oder 'aktie' (bestimmt, welcher Grundbetrag aus rules.json gilt).",
+  "werte": [
+    { "symbol": "SXR8.DE",   "name": "iShares Core S&P 500",            "typ": "etf",   "kategorie": "ETF" },
+    { "symbol": "EUNL.DE",   "name": "iShares Core MSCI World",         "typ": "etf",   "kategorie": "ETF" },
+    { "symbol": "IS3N.DE",   "name": "iShares Core MSCI EM IMI",        "typ": "etf",   "kategorie": "ETF" },
+    { "symbol": "EXSA.DE",   "name": "iShares STOXX Europe 600",        "typ": "etf",   "kategorie": "ETF" },
+    { "symbol": "EQQQ.DE",   "name": "Invesco Nasdaq-100",              "typ": "etf",   "kategorie": "ETF" },
+
+    { "symbol": "AAPL",      "name": "Apple",                           "typ": "aktie", "kategorie": "Big Tech" },
+    { "symbol": "MSFT",      "name": "Microsoft",                       "typ": "aktie", "kategorie": "Big Tech" },
+    { "symbol": "GOOGL",     "name": "Alphabet",                        "typ": "aktie", "kategorie": "Big Tech" },
+    { "symbol": "AMZN",      "name": "Amazon",                          "typ": "aktie", "kategorie": "Big Tech" },
+    { "symbol": "META",      "name": "Meta Platforms",                  "typ": "aktie", "kategorie": "Big Tech" },
+    { "symbol": "TSLA",      "name": "Tesla",                           "typ": "aktie", "kategorie": "Big Tech" },
+
+    { "symbol": "NVDA",      "name": "Nvidia",                          "typ": "aktie", "kategorie": "Halbleiter" },
+    { "symbol": "TSM",       "name": "TSMC",                            "typ": "aktie", "kategorie": "Halbleiter" },
+    { "symbol": "ASML.AS",   "name": "ASML",                            "typ": "aktie", "kategorie": "Halbleiter" },
+    { "symbol": "AMD",       "name": "AMD",                             "typ": "aktie", "kategorie": "Halbleiter" },
+    { "symbol": "AVGO",      "name": "Broadcom",                        "typ": "aktie", "kategorie": "Halbleiter" },
+    { "symbol": "IFX.DE",    "name": "Infineon",                        "typ": "aktie", "kategorie": "Halbleiter" },
+
+    { "symbol": "SAP.DE",    "name": "SAP",                             "typ": "aktie", "kategorie": "Software & Cloud" },
+    { "symbol": "ORCL",      "name": "Oracle",                          "typ": "aktie", "kategorie": "Software & Cloud" },
+    { "symbol": "CRM",       "name": "Salesforce",                      "typ": "aktie", "kategorie": "Software & Cloud" },
+    { "symbol": "NOW",       "name": "ServiceNow",                      "typ": "aktie", "kategorie": "Software & Cloud" },
+    { "symbol": "PLTR",      "name": "Palantir",                        "typ": "aktie", "kategorie": "Software & Cloud" },
+
+    { "symbol": "ALV.DE",    "name": "Allianz",                         "typ": "aktie", "kategorie": "Finanzen" },
+    { "symbol": "MUV2.DE",   "name": "Munich Re",                       "typ": "aktie", "kategorie": "Finanzen" },
+    { "symbol": "JPM",       "name": "JPMorgan Chase",                  "typ": "aktie", "kategorie": "Finanzen" },
+    { "symbol": "V",         "name": "Visa",                            "typ": "aktie", "kategorie": "Finanzen" },
+
+    { "symbol": "SIE.DE",    "name": "Siemens",                         "typ": "aktie", "kategorie": "Industrie & Energie" },
+    { "symbol": "ENR.DE",    "name": "Siemens Energy",                  "typ": "aktie", "kategorie": "Industrie & Energie" },
+    { "symbol": "SU.PA",     "name": "Schneider Electric",              "typ": "aktie", "kategorie": "Industrie & Energie" },
+    { "symbol": "IBE.MC",    "name": "Iberdrola",                       "typ": "aktie", "kategorie": "Industrie & Energie" },
+    { "symbol": "NEE",       "name": "NextEra Energy",                  "typ": "aktie", "kategorie": "Industrie & Energie" },
+
+    { "symbol": "MC.PA",     "name": "LVMH",                            "typ": "aktie", "kategorie": "Europa Sonstige" },
+    { "symbol": "NOVO-B.CO", "name": "Novo Nordisk",                    "typ": "aktie", "kategorie": "Europa Sonstige" }
+  ]
+}

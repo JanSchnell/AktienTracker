@@ -1,0 +1,12 @@
+{
+  "_hinweis": "Große Investoren, deren 13F-Filings (US-Aktienpositionen, quartalsweise, ca. 45 Tage Verzögerung) bei der SEC abgefragt werden. 'cik' = SEC-Kennnummer, zu finden über https://www.sec.gov/cgi-bin/browse-edgar?company=NAME&type=13F",
+  "investoren": [
+    { "name": "Berkshire Hathaway",          "person": "Warren Buffett / Greg Abel", "cik": "1067983" },
+    { "name": "Pershing Square",             "person": "Bill Ackman",                "cik": "1336528" },
+    { "name": "Scion Asset Management",      "person": "Michael Burry",              "cik": "1649339" },
+    { "name": "Duquesne Family Office",      "person": "Stanley Druckenmiller",      "cik": "1536411" },
+    { "name": "Appaloosa",                   "person": "David Tepper",               "cik": "1656456" },
+    { "name": "Himalaya Capital",            "person": "Li Lu",                      "cik": "1709323" },
+    { "name": "Bridgewater Associates",      "person": "Ray Dalio (Gründer)",        "cik": "1350694" }
+  ]
+}

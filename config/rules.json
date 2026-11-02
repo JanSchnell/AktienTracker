@@ -1,0 +1,19 @@
+{
+  "_hinweis": "Kaufstufen nach Rückgang vom Allzeithoch (Schlusskurs). 'ab_prozent' = Mindest-Rückgang. 'faktor' multipliziert den Grundbetrag. Beispielwerte – passe sie an deine eigene Strategie an.",
+  "grundbetrag": {
+    "etf": 100,
+    "aktie": 50
+  },
+  "waehrung_grundbetrag": "EUR",
+  "stufen": [
+    { "ab_prozent": 10, "faktor": 1, "name": "Stufe 1" },
+    { "ab_prozent": 20, "faktor": 2, "name": "Stufe 2" },
+    { "ab_prozent": 30, "faktor": 3, "name": "Stufe 3" },
+    { "ab_prozent": 40, "faktor": 4, "name": "Stufe 4" },
+    { "ab_prozent": 50, "faktor": 5, "name": "Stufe 5" }
+  ],
+  "telegram": {
+    "bei_neuer_stufe": true,
+    "taegliche_zusammenfassung": false
+  }
+}
