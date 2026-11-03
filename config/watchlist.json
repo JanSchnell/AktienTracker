@@ -20,6 +20,15 @@
     { "symbol": "AMD",       "name": "AMD",                             "typ": "aktie", "kategorie": "Halbleiter" },
     { "symbol": "AVGO",      "name": "Broadcom",                        "typ": "aktie", "kategorie": "Halbleiter" },
     { "symbol": "IFX.DE",    "name": "Infineon",                        "typ": "aktie", "kategorie": "Halbleiter" },
+    { "symbol": "MU",        "name": "Micron Technology",               "typ": "aktie", "kategorie": "Halbleiter" },
+
+    { "symbol": "VRT",       "name": "Vertiv",                          "typ": "aktie", "kategorie": "KI-Infrastruktur" },
+    { "symbol": "ANET",      "name": "Arista Networks",                 "typ": "aktie", "kategorie": "KI-Infrastruktur" },
+    { "symbol": "GEV",       "name": "GE Vernova",                      "typ": "aktie", "kategorie": "KI-Infrastruktur" },
+    { "symbol": "000660.KS", "name": "SK Hynix",                        "typ": "aktie", "kategorie": "KI-Infrastruktur" },
+    { "symbol": "LRCX",      "name": "Lam Research",                    "typ": "aktie", "kategorie": "KI-Infrastruktur" },
+    { "symbol": "MRVL",      "name": "Marvell Technology",              "typ": "aktie", "kategorie": "KI-Infrastruktur" },
+    { "symbol": "CLS",       "name": "Celestica",                       "typ": "aktie", "kategorie": "KI-Infrastruktur" },
 
     { "symbol": "SAP.DE",    "name": "SAP",                             "typ": "aktie", "kategorie": "Software & Cloud" },
     { "symbol": "ORCL",      "name": "Oracle",                          "typ": "aktie", "kategorie": "Software & Cloud" },
@@ -31,12 +40,17 @@
     { "symbol": "MUV2.DE",   "name": "Munich Re",                       "typ": "aktie", "kategorie": "Finanzen" },
     { "symbol": "JPM",       "name": "JPMorgan Chase",                  "typ": "aktie", "kategorie": "Finanzen" },
     { "symbol": "V",         "name": "Visa",                            "typ": "aktie", "kategorie": "Finanzen" },
+    { "symbol": "MA",        "name": "Mastercard",                      "typ": "aktie", "kategorie": "Finanzen" },
+    { "symbol": "GS",        "name": "Goldman Sachs",                   "typ": "aktie", "kategorie": "Finanzen" },
 
     { "symbol": "SIE.DE",    "name": "Siemens",                         "typ": "aktie", "kategorie": "Industrie & Energie" },
     { "symbol": "ENR.DE",    "name": "Siemens Energy",                  "typ": "aktie", "kategorie": "Industrie & Energie" },
     { "symbol": "SU.PA",     "name": "Schneider Electric",              "typ": "aktie", "kategorie": "Industrie & Energie" },
     { "symbol": "IBE.MC",    "name": "Iberdrola",                       "typ": "aktie", "kategorie": "Industrie & Energie" },
     { "symbol": "NEE",       "name": "NextEra Energy",                  "typ": "aktie", "kategorie": "Industrie & Energie" },
+    { "symbol": "RR.L",      "name": "Rolls-Royce",                     "typ": "aktie", "kategorie": "Industrie & Energie" },
+    { "symbol": "6861.T",    "name": "Keyence",                         "typ": "aktie", "kategorie": "Industrie & Energie" },
+    { "symbol": "SPCX",      "name": "SpaceX",                          "typ": "aktie", "kategorie": "Industrie & Energie" },
 
     { "symbol": "MC.PA",     "name": "LVMH",                            "typ": "aktie", "kategorie": "Europa Sonstige" },
     { "symbol": "NOVO-B.CO", "name": "Novo Nordisk",                    "typ": "aktie", "kategorie": "Europa Sonstige" }

@@ -368,7 +368,8 @@ function drawQuarters(q, cur) {
 // ------------------------------------------------------------ Investoren (13F)
 
 // Grober Abgleich Watchlist <-> Emittentenname im 13F (dort stehen keine Ticker)
-const ALIAS = { TSM: "TAIWAN SEMICONDUCTOR", GOOGL: "ALPHABET", META: "META PLATFORMS", V: "VISA INC", JPM: "JPMORGAN", NEE: "NEXTERA", AVGO: "BROADCOM", CRM: "SALESFORCE", NOW: "SERVICENOW", "ASML.AS": "ASML", "NOVO-B.CO": "NOVO-NORDISK" };
+const ALIAS = { TSM: "TAIWAN SEMICONDUCTOR", GOOGL: "ALPHABET", META: "META PLATFORMS", V: "VISA INC", JPM: "JPMORGAN", NEE: "NEXTERA", AVGO: "BROADCOM", CRM: "SALESFORCE", NOW: "SERVICENOW", "ASML.AS": "ASML", "NOVO-B.CO": "NOVO-NORDISK",
+  GEV: "GE VERNOVA", LRCX: "LAM RESEARCH", SPCX: "SPACE EXPLORATION", MA: "MASTERCARD", "6861.T": "KEYENCE", "000660.KS": "SK HYNIX" };
 function issuerKey(w) { return (ALIAS[w.symbol] || w.name.split(" ")[0]).toUpperCase(); }
 function matchWatch(name) {
   const n = (name || "").toUpperCase();
