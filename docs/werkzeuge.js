@@ -111,6 +111,7 @@ function renderAlarme() {
 const VERGLEICH_ZEILEN = (cur) => [
   { label: "Branche", text: (d) => (d.f ? d.f.branche : "ETF") || "–" },
   { label: term("marktkap", "Börsenwert in €"), wert: (d) => (d.f && d.f.marktkap && OV.fx ? d.f.marktkap * (OV.fx[d.w.waehrung] || NaN) : null), zeige: (v) => big(v) + " €" },
+  { label: term("kgv", "KGV"), wert: (d) => d.f && d.f.kgv, zeige: (v) => fmt(v, 1), besser: "tief", nurPositiv: true },
   { label: term("kgv_erw", "KGV erwartet"), wert: (d) => d.f && d.f.kgv_erwartet, zeige: (v) => fmt(v, 1), besser: "tief", nurPositiv: true },
   { label: term("peg", "PEG"), wert: (d) => d.f && d.f.peg, zeige: (v) => fmt(v, 2), besser: "tief", nurPositiv: true },
   { label: term("kuv", "KUV"), wert: (d) => d.f && d.f.kuv, zeige: (v) => fmt(v, 1), besser: "tief", nurPositiv: true },
@@ -204,24 +205,28 @@ const KGV_STUFEN = [[4, "auffällig niedrig", "gelb"], [15, "niedrig", "gruen"],
 const kgvUrteil = (v) => (v > 0 ? KGV_STUFEN.find(([g]) => v < g) : null);
 
 function kgvBox(f) {
-  const kgv = f.kgv_erwartet > 0 ? f.kgv_erwartet : f.kgv > 0 ? f.kgv : null;
+  // Normales KGV wie in der Kachel. Nur wenn es fehlt, hilfsweise das erwartete.
+  const normal = f.kgv > 0;
+  const kgv = normal ? f.kgv : f.kgv_erwartet > 0 ? f.kgv_erwartet : null;
   if (!kgv) return `<div class="card kgv-box"><h3>Ist das KGV hoch?</h3><p class="small" style="margin:0">Hier gibt es kein sinnvolles KGV, weil aktuell oder für das nächste Jahr Verluste erwartet werden. Der Blick auf ${term("kuv", "KUV")} und ${term("fcf", "Free Cashflow")} hilft dann eher.</p></div>`;
   const u = kgvUrteil(kgv);
-  const vergleich = (ENT ? ENT.werte : []).filter((x) => x.m && x.m.kgv_erwartet >= 4 && x.m.kgv_erwartet < 200);
-  const alle = median(vergleich.map((x) => x.m.kgv_erwartet));
+  const feld = normal ? "kgv" : "kgv_erwartet";
+  const vergleich = (ENT ? ENT.werte : []).filter((x) => x.m && x.m[feld] >= 4 && x.m[feld] < 200);
+  const alle = median(vergleich.map((x) => x.m[feld]));
   const branche = vergleich.filter((x) => x.sektor && x.sektor === f.sektor);
-  const bm = branche.length >= 5 ? median(branche.map((x) => x.m.kgv_erwartet)) : null;
+  const bm = branche.length >= 5 ? median(branche.map((x) => x.m[feld])) : null;
   const pos = Math.min(100, kgv / 60 * 100);
   const noetig = kgv > 20 ? ((kgv / 20) ** (1 / 5) - 1) * 100 : null;
   const aktuell = f.gewinnwachstum != null ? f.gewinnwachstum * 100 : null;
   const pegText = f.peg > 0 ? (f.peg < 1 ? "für das erwartete Wachstum eher günstig" : f.peg < 2 ? "im Verhältnis zum Wachstum etwa fair" : "selbst für das erwartete Wachstum eher teuer") : null;
   return `<div class="card kgv-box">
-    <div class="kgv-kopf"><h3>Ist das KGV hoch?</h3><span class="kgv-urteil"><span class="dot ${u[2]}"></span> ${fmt(kgv, 1)}: ${u[1]}</span></div>
+    <div class="kgv-kopf"><h3>Ist das KGV hoch?</h3><span class="kgv-urteil"><span class="dot ${u[2]}"></span> ${normal ? "KGV" : "KGV erwartet"} ${fmt(kgv, 1)}: ${u[1]}</span></div>
     <div class="kgv-skala" aria-hidden="true"><i class="s1"></i><i class="s2"></i><i class="s3"></i><i class="s4"></i><b style="left:${pos}%"></b></div>
     <div class="kgv-labels small muted"><span>0</span><span style="left:25%">15</span><span style="left:41.7%">25</span><span style="left:66.7%">40</span><span style="left:100%">60+</span></div>
     <ul class="clean small">
-      <li><strong>In Worten:</strong> Du zahlst heute etwa ${fmt(kgv, 0)} erwartete Jahresgewinne. Blieben die Gewinne gleich, entspräche das rund ${fmt(100 / kgv, 1)} % Gewinn pro Jahr auf den Kaufpreis.</li>
+      <li><strong>In Worten:</strong> Du zahlst heute etwa ${fmt(kgv, 0)} ${normal ? "Jahresgewinne, gemessen an den letzten 12 Monaten" : "erwartete Jahresgewinne, weil Yahoo hier kein normales KGV liefert"}. Blieben die Gewinne gleich, entspräche das rund ${fmt(100 / kgv, 1)} % Gewinn pro Jahr auf den Kaufpreis.</li>
       ${alle ? `<li><strong>Vergleich:</strong> Der mittlere Wert aller hier beobachteten Aktien liegt bei ${fmt(alle, 0)}${bm ? `, in der Branche ${esc(SEKTOR_DE[f.sektor] || f.sektor)} bei ${fmt(bm, 0)}` : ""}.</li>` : ""}
+      ${normal && f.kgv_erwartet > 0 ? `<li><strong>Erwartung:</strong> Mit den von Analysten geschätzten Gewinnen läge das ${term("kgv_erw", "erwartete KGV")} bei ${fmt(f.kgv_erwartet, 1)}. ${f.kgv_erwartet < f.kgv * 0.8 ? "Sie rechnen also mit deutlich steigenden Gewinnen, das kann auch falsch sein." : f.kgv_erwartet > f.kgv * 1.2 ? "Sie rechnen also mit sinkenden Gewinnen." : "Das liegt nah am heutigen Wert."}</li>` : ""}
       ${pegText ? `<li><strong>Wachstum:</strong> ${term("peg", "PEG")} ${fmt(f.peg, 2)}, also ${pegText}.</li>` : ""}
       ${noetig ? `<li><strong>Was eintreten müsste:</strong> Damit das KGV bei gleichem Kurs in 5 Jahren bei 20 liegt, müsste der Gewinn um etwa ${fmt(noetig, 0)} % pro Jahr steigen.${aktuell != null ? ` Zuletzt lag das Gewinnwachstum bei ${fmtPct(aktuell, 0)}.` : ""}</li>`
         : `<li><strong>Einordnung:</strong> Ein niedriges KGV kann günstig sein oder bedeuten, dass der Markt mit sinkenden Gewinnen rechnet. Prüfe, was dahintersteckt.</li>`}

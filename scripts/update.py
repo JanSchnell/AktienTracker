@@ -649,7 +649,7 @@ def screen(info, p):
     return {
         "score": round(sum(b.values()) / len(b) * 5) if len(b) >= 3 else None,
         "bausteine": b, "plus": plus, "minus": minus,
-        "m": {"umsatzwachstum": wachstum, "gewinnwachstum": gewinn, "op_marge": marge, "roe": roe, "kgv_erwartet": fpe, "peg": peg,
+        "m": {"umsatzwachstum": wachstum, "gewinnwachstum": gewinn, "op_marge": marge, "roe": roe, "kgv": clean(info.get("trailingPE")), "kgv_erwartet": fpe, "peg": peg,
               "kuv": kuv, "dividende": clean(info.get("dividendYield")), "fcf_rendite": fcf_rendite},
         "marktkap": mc, "sektor": info.get("sector"), "branche": info.get("industry"),
         "analysten": info.get("recommendationKey"), "kursziel": clean(info.get("targetMeanPrice")),
