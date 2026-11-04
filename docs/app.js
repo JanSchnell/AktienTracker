@@ -687,7 +687,7 @@ function chartDefaults() {
   Chart.defaults.font.family = getComputedStyle(document.body).fontFamily;
 }
 
-const RANGES = [["1W", 7], ["1M", 30], ["6M", 182], ["1J", 365], ["5J", 1825], ["Max", 1e6]];
+const RANGES = [["1W", 7], ["1M", 30], ["6M", 182], ["1J", 365], ["Max", 1e6]];
 const gueltigerRange = (r) => (RANGES.some(([x]) => x === r) ? r : "1J");
 
 function rangePoints(hist, range) {
