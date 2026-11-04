@@ -1,12 +1,26 @@
 {
-  "_hinweis": "Große Investoren, deren 13F-Filings (US-Aktienpositionen, quartalsweise, ca. 45 Tage Verzögerung) bei der SEC abgefragt werden. 'cik' = SEC-Kennnummer, zu finden über https://www.sec.gov/cgi-bin/browse-edgar?company=NAME&type=13F",
+  "_hinweis": "Große Investoren, deren 13F-Filings (US-Aktienpositionen, quartalsweise, ca. 45 Tage Verzögerung) bei der SEC abgefragt werden. 'cik' = SEC-Kennnummer, zu finden über https://www.sec.gov/cgi-bin/browse-edgar?company=NAME&type=13F. 'kurz' und 'beschreibung' erscheinen auf der Webseite.",
   "investoren": [
-    { "name": "Berkshire Hathaway",          "person": "Warren Buffett / Greg Abel", "cik": "1067983" },
-    { "name": "Pershing Square",             "person": "Bill Ackman",                "cik": "1336528" },
-    { "name": "Scion Asset Management",      "person": "Michael Burry",              "cik": "1649339" },
-    { "name": "Duquesne Family Office",      "person": "Stanley Druckenmiller",      "cik": "1536411" },
-    { "name": "Appaloosa",                   "person": "David Tepper",               "cik": "1656456" },
-    { "name": "Himalaya Capital",            "person": "Li Lu",                      "cik": "1709323" },
-    { "name": "Bridgewater Associates",      "person": "Ray Dalio (Gründer)",        "cik": "1350694" }
+    { "name": "Berkshire Hathaway", "person": "Warren Buffett / Greg Abel", "cik": "1067983",
+      "kurz": "Buffetts Konzern, langfristige Käufe von Qualitätsunternehmen.",
+      "beschreibung": "Der von Warren Buffett aufgebaute Mischkonzern (Versicherungen, Eisenbahn, Energie) legt seine Überschüsse in Aktien an. Bekannt für sehr lange Haltedauern und Qualitätsunternehmen zu vernünftigen Preisen. Buffett hat die CEO-Rolle Ende 2025 an Greg Abel übergeben." },
+    { "name": "Pershing Square", "person": "Bill Ackman", "cik": "1336528",
+      "kurz": "Hedgefonds von Bill Ackman, wenige große Wetten.",
+      "beschreibung": "Hedgefonds des US-Investors Bill Ackman. Hält oft nur rund zehn Positionen und nimmt als „aktivistischer“ Investor teils öffentlich Einfluss auf das Management. Dadurch hat jede einzelne Position viel Gewicht." },
+    { "name": "Scion Asset Management", "person": "Michael Burry", "cik": "1649339",
+      "kurz": "Fonds von Michael Burry („The Big Short“), oft gegen den Markt.",
+      "beschreibung": "Fonds von Michael Burry, der mit seiner Wette gegen den US-Immobilienmarkt 2008 bekannt wurde (Buch und Film „The Big Short“). Das Depot ist klein und wechselt schnell, Absicherungen über Optionen erscheinen hier nicht. Eine einzelne Meldung sagt deshalb wenig über seine tatsächliche Haltung." },
+    { "name": "Duquesne Family Office", "person": "Stanley Druckenmiller", "cik": "1536411",
+      "kurz": "Privatvermögen von Stanley Druckenmiller, einem der erfolgreichsten Makro-Investoren.",
+      "beschreibung": "Ein „Family Office“ verwaltet das Vermögen einer einzelnen Familie, hier das von Stanley Druckenmiller. Er arbeitete früher mit George Soros (Wette gegen das britische Pfund 1992) und erzielte über Jahrzehnte sehr hohe Renditen. Er orientiert sich an großen Wirtschaftstrends und schichtet schnell um." },
+    { "name": "Appaloosa", "person": "David Tepper", "cik": "1656456",
+      "kurz": "Hedgefonds von David Tepper, kauft gern in Krisen.",
+      "beschreibung": "Hedgefonds von David Tepper, der auch das NFL-Team Carolina Panthers besitzt. Ursprünglich auf Krisenfälle und notleidende Anleihen spezialisiert, berühmt für Bankaktien-Käufe auf dem Tiefpunkt 2009. Heute oft große Positionen in US-Technologie und China." },
+    { "name": "Himalaya Capital", "person": "Li Lu", "cik": "1709323",
+      "kurz": "Value-Investor Li Lu, von Charlie Munger geschätzt.",
+      "beschreibung": "Fonds von Li Lu, der als Student an den Tiananmen-Protesten 1989 beteiligt war und später Investor wurde. Charlie Munger vertraute ihm Teile seines Familienvermögens an. Sehr konzentriertes Depot mit langer Haltedauer, Berkshire-ähnlicher Stil." },
+    { "name": "Bridgewater Associates", "person": "Ray Dalio (Gründer)", "cik": "1350694",
+      "kurz": "Einer der weltgrößten Hedgefonds, regelbasierter Makro-Ansatz.",
+      "beschreibung": "Von Ray Dalio gegründeter, sehr großer Hedgefonds. Arbeitet stark regel- und modellbasiert über viele Anlageklassen hinweg. Das Aktiendepot ist breit gestreut und wird häufig umgebaut. Einzelne Zu- oder Verkäufe sind daher meist keine Überzeugungswette auf ein Unternehmen. Dalio selbst hat sich aus der Führung zurückgezogen." }
   ]
 }

@@ -73,6 +73,9 @@ def load_profiles():
             out.update({k: v for k, v in load_json(p, {}).items() if not k.startswith("_")})
         except Exception as e:
             print("Profil-Datei fehlerhaft:", p.name, e)
+    for sym, ceo in (load_json(CONFIG / "ceos.json", {}) or {}).items():
+        if sym in out:
+            out[sym]["ceo_bio"] = ceo
     return out
 
 
@@ -168,7 +171,9 @@ def price_block(hist, stufen):
         "tief52": float(year.min()),
         "sma200": sma200,
         "abstand_sma200": pct(last, sma200),
+        "perf_1w": pct(last, back(7)),
         "perf_1m": pct(last, back(30)),
+        "perf_3m": pct(last, back(91)),
         "perf_6m": pct(last, back(182)),
         "perf_1j": pct(last, back(365)),
         "perf_5j": pct(last, back(5 * 365)),
@@ -222,6 +227,7 @@ def annual(t):
         return []
     f = {
         "umsatz": by_year(inc, ROWS_INCOME["umsatz"]),
+        "bruttogewinn": by_year(inc, ROWS_INCOME["bruttogewinn"]),
         "operatives_ergebnis": by_year(inc, ROWS_INCOME["operatives_ergebnis"]),
         "nettogewinn": by_year(inc, ROWS_INCOME["nettogewinn"]),
         "eps": by_year(inc, ROWS_INCOME["eps"]),
@@ -244,6 +250,7 @@ def annual(t):
         if e["umsatz"] is None and e["nettogewinn"] is None:
             continue
         u = e["umsatz"]
+        e["bruttomarge"] = e["bruttogewinn"] / u if u and e["bruttogewinn"] is not None else None
         e["operative_marge"] = e["operatives_ergebnis"] / u if u and e["operatives_ergebnis"] is not None else None
         e["nettomarge"] = e["nettogewinn"] / u if u and e["nettogewinn"] is not None else None
         e["capex_quote"] = abs(e["capex"]) / u if u and e["capex"] is not None else None
@@ -348,12 +355,13 @@ def pruefung(jahre, info, sektor):
 
 def officers(info):
     out = []
-    for o in (info.get("companyOfficers") or [])[:6]:
+    for o in (info.get("companyOfficers") or [])[:8]:
         title = o.get("title") or ""
         out.append({
             "name": re.sub(r"\s+", " ", o.get("name") or "").strip(),
             "titel": title,
             "alter": o.get("age"),
+            "verguetung": clean(o.get("totalPay")),
             "ceo": bool(re.search(r"\bCEO\b|Chief Executive|Vorstandsvorsitz", title, re.I)),
         })
     return out
@@ -524,7 +532,7 @@ def insider_trades(t):
     for _, r in df.head(25).iterrows():
         text = str(r.get("Text") or "")
         tx = str(r.get("Transaction") or "")
-        art = "kauf" if re.search(r"purchase", text + tx, re.I) else \
+        art = "kauf" if re.search(r"purchase|bought", text + tx, re.I) else \
               "verkauf" if re.search(r"sale", text + tx, re.I) else "sonstiges"
         d = r.get("Start Date")
         out.append({
@@ -539,8 +547,151 @@ def insider_trades(t):
     return out
 
 
+def insider_bestand(t):
+    """Aktueller Aktienbestand der Insider laut letzter Meldung (nur US-Werte)."""
+    try:
+        df = t.insider_roster_holders
+    except Exception:
+        return []
+    if df is None or df.empty:
+        return []
+    out = []
+    for _, r in df.iterrows():
+        d = r.get("Latest Transaction Date")
+        out.append({
+            "person": str(r.get("Name") or "").title(),
+            "position": str(r.get("Position") or ""),
+            "aktien": clean(r.get("Shares Owned Directly")),
+            "letzte_art": str(r.get("Most Recent Transaction") or ""),
+            "datum": d.strftime("%Y-%m-%d") if hasattr(d, "strftime") else None,
+        })
+    return sorted(out, key=lambda x: -(x["aktien"] or 0))
+
+
+def stufe_wert(v, leiter, sonst=0):
+    """Erste Stufe der Leiter [(schwelle, punkte), ...], die v erreicht."""
+    for schwelle, punkte in leiter:
+        if v >= schwelle:
+            return punkte
+    return sonst
+
+
+def screen(info, p):
+    """Regelbasierter Daten-Score (0-100) aus fünf Bausteinen je 0-20, mit Begründungen.
+    Beschreibt nur die aktuelle Datenlage, ist keine Prognose und keine Kaufempfehlung."""
+    pc = lambda k: None if clean(info.get(k)) is None else clean(info.get(k)) * 100
+    wachstum, gewinn, marge, roe = pc("revenueGrowth"), pc("earningsGrowth"), pc("operatingMargins"), pc("returnOnEquity")
+    fpe, peg, kuv = clean(info.get("forwardPE")), clean(info.get("trailingPegRatio")), clean(info.get("priceToSalesTrailing12Months"))
+    mc, fcf = clean(info.get("marketCap")), clean(info.get("freeCashflow"))
+    debt, cash, ebitda = clean(info.get("totalDebt")), clean(info.get("totalCash")), clean(info.get("ebitda"))
+    same_ccy = (info.get("financialCurrency") or info.get("currency")) == info.get("currency")
+    finanz = info.get("sector") == "Financial Services"
+    fcf_rendite = fcf / mc * 100 if fcf is not None and mc and same_ccy and not finanz else None
+    plus, minus = [], []
+    b = {}
+
+    if wachstum is not None:
+        b["wachstum"] = stufe_wert(wachstum, [(25, 20), (15, 16), (8, 11), (0, 5)])
+        if wachstum >= 15:
+            plus.append(f"Umsatz wächst stark ({wachstum:+.0f} % ggü. Vorjahr)")
+        elif wachstum < 0:
+            minus.append(f"Umsatz schrumpft ({wachstum:+.0f} % ggü. Vorjahr)")
+    if marge is not None:
+        b["profit"] = stufe_wert(marge, [(30, 20), (20, 16), (10, 11), (0, 5)])
+        if marge >= 25:
+            plus.append(f"Hohe operative Marge ({marge:.0f} %)")
+        elif marge < 0:
+            minus.append(f"Operativ im Minus (Marge {marge:.0f} %)")
+    if fpe is not None and 0 < fpe < 4:
+        minus.append(f"KGV erwartet auffällig niedrig ({fpe:.1f}): Datenfehler oder einmalige Gewinnspitze möglich")
+    elif fpe is not None and fpe > 0:
+        b["bewertung"] = stufe_wert(-fpe, [(-15, 20), (-22, 16), (-30, 11), (-45, 6)], 2)
+        if fcf_rendite is not None and fcf_rendite >= 4:
+            b["bewertung"] = min(20, b["bewertung"] + 3)
+        if fpe <= 18:
+            plus.append(f"Niedrige Bewertung (KGV erwartet {fpe:.0f})")
+        elif fpe >= 45:
+            minus.append(f"Hohe Bewertung (KGV erwartet {fpe:.0f})")
+        if peg is not None and 0 < peg <= 1.2 and fpe > 18:
+            plus.append(f"Bewertung im Verhältnis zum Wachstum moderat (PEG {peg:.1f})")
+    elif fpe is not None:
+        minus.append("Für das nächste Jahr werden Verluste erwartet")
+    a, p6, p12 = p.get("abstand_sma200"), p.get("perf_6m"), p.get("perf_1j")
+    if a is not None or p6 is not None or p12 is not None:
+        b["trend"] = (8 if (a or 0) > 0 else 0) + (6 if (p6 or 0) > 0 else 0) + (6 if (p12 or 0) > 0 else 0)
+        if a is not None and a >= 50:
+            b["trend"] = max(0, b["trend"] - 6)
+            minus.append(f"Heiß gelaufen ({a:+.0f} % über der 200-Tage-Linie)")
+        elif (p6 or 0) >= 20 and (a or 0) > 0:
+            plus.append(f"Kurstrend intakt ({p6:+.0f} % in 6 Monaten)")
+        if p.get("rueckgang_ath", 0) >= 40:
+            minus.append(f"{p['rueckgang_ath']:.0f} % unter dem Allzeithoch, Ursache prüfen")
+    if not finanz and debt is not None and cash is not None:
+        net = debt - cash
+        if net <= 0:
+            b["bilanz"] = 20
+            plus.append("Mehr Cash als Schulden")
+        elif ebitda and ebitda > 0:
+            x = net / ebitda
+            b["bilanz"] = stufe_wert(-x, [(-1, 16), (-2, 13), (-3.5, 7)], 2)
+            if x >= 3.5:
+                minus.append(f"Hohe Verschuldung ({x:.1f}× EBITDA)")
+        else:
+            b["bilanz"] = 0
+            minus.append("Schulden bei negativem operativem Ergebnis")
+    if fcf_rendite is not None:
+        if fcf_rendite >= 4:
+            plus.append(f"Viel Free Cashflow im Verhältnis zum Börsenwert ({fcf_rendite:.1f} %)")
+        elif fcf_rendite < 0:
+            minus.append("Free Cashflow negativ")
+    return {
+        "score": round(sum(b.values()) / len(b) * 5) if len(b) >= 3 else None,
+        "bausteine": b, "plus": plus, "minus": minus,
+        "m": {"umsatzwachstum": wachstum, "gewinnwachstum": gewinn, "op_marge": marge, "roe": roe, "kgv_erwartet": fpe, "peg": peg,
+              "kuv": kuv, "dividende": clean(info.get("dividendYield")), "fcf_rendite": fcf_rendite},
+        "marktkap": mc, "sektor": info.get("sector"), "branche": info.get("industry"),
+        "analysten": info.get("recommendationKey"), "kursziel": clean(info.get("targetMeanPrice")),
+    }
+
+
+def entdecken_eintrag(entry, p, s, waehrung, in_watchlist, heiss):
+    keys = ("kurs", "tag_pct", "rueckgang_ath", "abstand_sma200", "rsi", "perf_1m", "perf_6m", "perf_1j")
+    return {k: entry.get(k) for k in ("symbol", "name", "kategorie", "thema", "bekannt", "kurz", "these", "risiko")} | \
+        {k: p.get(k) for k in keys} | s | {"waehrung": waehrung, "in_watchlist": in_watchlist, "heiss": heiss}
+
+
+def scan_universe(watch, rules, profiles, items):
+    """Daten-Score für die Watchlist und die zusätzlichen Ideen aus config/universe.json."""
+    out = []
+    for w in items:
+        if w.get("screen"):
+            prof = profiles.get(w["symbol"]) or {}
+            risiko = " · ".join((prof.get("risiken") or [])[:2])
+            out.append(entdecken_eintrag({**w, "kurz": prof.get("kurz"), "these": prof.get("zukunft"), "risiko": risiko},
+                                         w, w["screen"], w.get("waehrung"), True, w.get("heiss")))
+    im_tracker = {w["symbol"].upper() for w in watch}
+    for e in (load_json(CONFIG / "universe.json", {}) or {}).get("werte", []):
+        if e["symbol"].upper() in im_tracker:
+            continue
+        try:
+            t = yf.Ticker(e["symbol"])
+            hist = t.history(period="max", auto_adjust=False)
+            if hist is None or hist.empty:
+                raise RuntimeError("keine Kursdaten")
+            p = price_block(hist, rules["stufen"])
+            info = t.info or {}
+            out.append(entdecken_eintrag(e, p, screen(info, p), info.get("currency"), False, overheat_level(p, "aktie", rules)))
+            print("ok    Idee", e["symbol"])
+        except Exception as ex:
+            print("FEHLER Idee", e["symbol"], scrub(ex))
+    return sorted(out, key=lambda x: -(x["score"] or 0))
+
+
 def process_ticker(entry, rules, state, alerts, profiles, politik):
     sym = entry["symbol"]
+    # Neu aufgenommene Werte: Ausgangszustand speichern, aber keine Meldungen auslösen
+    bekannt = state.setdefault("bekannt", [])
+    alerts_start = len(alerts)
     t = yf.Ticker(sym)
     hist = t.history(period="max", auto_adjust=False)
     if hist is None or hist.empty:
@@ -555,6 +706,7 @@ def process_ticker(entry, rules, state, alerts, profiles, politik):
     is_etf = entry.get("typ") == "etf"
     f = None if is_etf else fundamentals(t, info)
     ins = [] if is_etf else insider_trades(t)
+    bestand = [] if is_etf or "." in sym else insider_bestand(t)
     since = (datetime.now() - timedelta(days=90)).strftime("%Y-%m-%d")
     ins_kaeufe_90 = [x for x in ins if x["art"] == "kauf" and x["datum"] >= since]
     us_aktie = not is_etf and "." not in sym
@@ -584,8 +736,11 @@ def process_ticker(entry, rules, state, alerts, profiles, politik):
         "pruefung_rot": sum(1 for x in (f or {}).get("pruefung", []) if x["farbe"] == "rot"),
         "pruefung_anzahl": len((f or {}).get("pruefung", [])),
         "ceo": next((o["name"] for o in (f or {}).get("management", []) if o["ceo"]), None),
+        "sektor": (f or {}).get("sektor"),
+        "branche": (f or {}).get("branche"),
+        "screen": None if is_etf else screen(info, p),
     }
-    detail = {"item": item, "historie": history_series(hist), "fundamentaldaten": f, "insider": ins,
+    detail = {"item": item, "historie": history_series(hist), "fundamentaldaten": f, "insider": ins, "insider_bestand": bestand,
               "politiker": pol, "profil": profiles.get(sym)}
     save_json(OUT / "werte" / f"{safe_name(sym)}.json", detail)
 
@@ -638,6 +793,9 @@ def process_ticker(entry, rules, state, alerts, profiles, politik):
                 wert = f" für {x['wert'] / 1e6:.2f} Mio. $" if x["wert"] else ""
                 alerts.append(f"🟢 Insider-Kauf bei <b>{entry['name']}</b>: {x['person']} ({x['position']}) "
                               f"kauft {x['aktien']:,.0f} Aktien{wert} am {x['datum']}")
+    if sym not in bekannt:
+        del alerts[alerts_start:]
+        bekannt.append(sym)
     return item
 
 
@@ -755,12 +913,14 @@ def main():
     inv_out = []
     for inv in investors:
         try:
-            inv_out.append(investor_holdings(inv, state, alerts))
+            # Beschreibung frisch aus der Konfiguration, das Filing-Ergebnis kann aus dem Cache kommen
+            inv_out.append({**investor_holdings(inv, state, alerts), "person": inv.get("person"), "kurz": inv.get("kurz"), "beschreibung": inv.get("beschreibung")})
             print("ok    13F", inv["name"])
         except Exception as ex:
             fehler.append({"symbol": f"13F {inv['name']}", "fehler": scrub(ex)})
             print("FEHLER 13F", inv["name"], scrub(ex))
 
+    entdecken = scan_universe(watch, rules, profiles, items)
     now = datetime.now(timezone.utc).isoformat(timespec="minutes")
     namen = {e["symbol"]: e["name"] for e in watch}
     for x in politik:
@@ -769,6 +929,7 @@ def main():
     save_json(OUT / "overview.json", {"aktualisiert": now, "regeln": rules, "werte": items, "fehler": fehler,
                                       "repo": os.environ.get("GITHUB_REPOSITORY") or "JanSchnell/AktienTracker"})
     save_json(OUT / "investoren.json", {"aktualisiert": now, "investoren": inv_out, "politiker": politik})
+    save_json(OUT / "entdecken.json", {"aktualisiert": now, "werte": entdecken})
 
     if alerts and state.get("initialisiert"):
         for a in alerts:
