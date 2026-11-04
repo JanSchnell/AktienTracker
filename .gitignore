@@ -2,3 +2,7 @@
 docs/data/
 __pycache__/
 .claude/
+
+# Private Notizen (Repository ist öffentlich)
+/data/
+issue_result.md

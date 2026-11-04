@@ -11,11 +11,14 @@ on:
   push:
     branches: [main]
     paths: ["config/**", "docs/**", "scripts/**"]
+  issues:
+    types: [opened]            # „Watchlist: …“-Issues von der Webseite
 
 permissions:
   contents: write
   pages: write
   id-token: write
+  issues: write
 
 concurrency:
   group: update
@@ -23,6 +26,11 @@ concurrency:
 
 jobs:
   update:
+    # Issues nur vom Repository-Besitzer und nur mit passendem Titel verarbeiten
+    if: >-
+      github.event_name != 'issues' ||
+      (startsWith(github.event.issue.title, 'Watchlist') &&
+       github.event.issue.user.login == github.repository_owner)
     runs-on: ubuntu-latest
     environment:
       name: github-pages
@@ -37,6 +45,19 @@ jobs:
 
       - run: pip install -r requirements.txt
 
+      - name: Watchlist-Änderung aus Issue übernehmen
+        if: github.event_name == 'issues'
+        env:
+          ISSUE_TITLE: ${{ github.event.issue.title }}
+          ISSUE_BODY: ${{ github.event.issue.body }}
+          GH_TOKEN: ${{ github.token }}
+          ISSUE_NR: ${{ github.event.issue.number }}
+        run: |
+          python scripts/watchlist_issue.py || true
+          gh issue comment "$ISSUE_NR" --body-file issue_result.md
+          gh issue close "$ISSUE_NR"
+          rm -f issue_result.md
+
       - name: Kurse, Kennzahlen und Filings laden
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
@@ -44,12 +65,13 @@ jobs:
           SEC_USER_AGENT: ${{ secrets.SEC_USER_AGENT }}
         run: python scripts/update.py
 
-      - name: Alarm-Zustand speichern
+      - name: Watchlist und Alarm-Zustand speichern
         run: |
           git config user.name "aktien-tracker-bot"
           git config user.email "actions@users.noreply.github.com"
-          git add state/state.json
-          git diff --cached --quiet || git commit -m "Zustand aktualisiert"
+          git add state/state.json config/watchlist.json
+          git diff --cached --quiet || git commit -m "Zustand/Watchlist aktualisiert"
+          git pull --rebase -q || true
           git push || true
 
       - uses: actions/configure-pages@v5

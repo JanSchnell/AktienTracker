@@ -6,7 +6,13 @@ Dein persönlicher Analyst für die Watchlist. Mehrmals täglich werden automati
 - **Quartalszahlen**: Umsatz, Margen, Gewinn je Aktie, Free Cashflow, Wachstum, Trend-Ampel, Termin der nächsten Zahlen, Analysten-Kursziele
 - **Insider-Trades** (US-Werte): Manager, die eigene Aktien kaufen oder verkaufen
 - **13F-Filings großer Investoren**: Berkshire Hathaway, Pershing Square (Ackman), Duquesne (Druckenmiller) usw. Neu, aufgestockt, reduziert, verkauft
-- **Telegram-Nachricht**, wenn ein Wert eine neue Kaufstufe erreicht, ein Insider kauft oder ein neues 13F erscheint
+- **Unternehmensprofile**: Was macht die Firma, wie verdient sie Geld, Burggraben, Markt, Pläne, CEO, Management, Gegenargumente (`config/profiles/`)
+- **Kennzahlen-Check**: Umsatz-/Gewinnwachstum, Margen, Free Cashflow, CapEx, Schulden, Verwässerung, Bewertung, Insider-Anteil, automatisch mit Ampel
+- **Jahreszahlen** (ca. 4 Jahre) und **Management** (live)
+- **Politiker-Trades** (US-Kongress, STOCK Act) über die freie Bargo-API
+- **Überhitzungs-Hinweise** 🔥, wenn ein Wert weit über der 200-Tage-Linie liegt (Anlass zum Prüfen, kein Verkaufssignal)
+- **Werte selbst hinzufügen/entfernen** über die Webseite (öffnet ein vorausgefülltes GitHub-Issue, das automatisch verarbeitet wird)
+- **Telegram-Nachricht**, wenn ein Wert eine neue Kaufstufe erreicht oder heiß läuft, ein Insider oder Politiker kauft oder ein neues 13F erscheint
 
 Das Tool **kauft und verkauft nichts** und ist keine Anlageberatung. Es zeigt Daten und wendet deine eigenen Regeln an.
 

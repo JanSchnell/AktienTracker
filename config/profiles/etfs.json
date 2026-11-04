@@ -1,0 +1,53 @@
+{
+  "_hinweis": "Profile: von Claude zusammengestellt (Wissensstand bis ca. Mitte 2026), keine Anlageberatung. Live-Zahlen stehen auf der Seite darüber. Felder frei ergänzbar.",
+  "SXR8.DE": {
+    "stand": "2026-11",
+    "kurz": "Die 500 größten börsennotierten US-Unternehmen in einem Fonds.",
+    "was_macht": "Bildet den S&P 500 nach: rund 500 große US-Unternehmen, gewichtet nach Börsenwert. Thesaurierend (Dividenden werden automatisch wieder angelegt), Fondswährung USD, gehandelt in Euro an Xetra. Laufende Kosten ca. 0,07 % pro Jahr.",
+    "unterschied": "Sehr günstig und extrem liquide. Im Vergleich zum MSCI World steckt hier nur die USA drin, im MSCI World sind es ca. 70 % USA. Wer beide hält, verdoppelt größtenteils dieselben Firmen.",
+    "markt": "Die Top 10 (Nvidia, Microsoft, Apple, Alphabet, Amazon, Meta, Broadcom, Tesla …) machen über ein Drittel des Index aus. Das ist eine historisch hohe Konzentration.",
+    "risiken": ["Hohe Konzentration auf wenige Tech-/KI-Konzerne", "Bewertung des US-Markts historisch hoch (KGV deutlich über dem Langfrist-Schnitt)", "Wechselkursrisiko USD/EUR: ein fallender Dollar senkt die Rendite in Euro", "Nur ein Land"],
+    "these_falsch_wenn": "Die US-Wirtschaft verliert über viele Jahre ihre Vormachtstellung bei Gewinnwachstum und Innovation.",
+    "warum_nicht_etf": "Ist selbst ein breit gestreuter ETF. Seit 1950 lag der Index in jedem 20-Jahres-Zeitraum im Plus, kurzfristig sind aber 30–50 % Rückgang möglich (2000–02, 2008, 2020, 2022)."
+  },
+  "EUNL.DE": {
+    "stand": "2026-11",
+    "kurz": "Rund 1.300 große und mittlere Unternehmen aus 23 Industrieländern.",
+    "was_macht": "Bildet den MSCI World nach. Gut 70 % USA, dazu Japan, Großbritannien, Kanada, Frankreich, Schweiz, Deutschland usw. Keine Schwellenländer. Thesaurierend, laufende Kosten ca. 0,20 % pro Jahr.",
+    "unterschied": "Der Klassiker für einen breiten Weltdepot-Kern. Breiter als der S&P 500, aber durch die USA-Gewichtung ähnlich in der Entwicklung.",
+    "markt": "Etwa 85 % der Börsenwerte der Industrieländer. Größte Sektoren: IT, Finanzen, Gesundheit, Industrie.",
+    "risiken": ["Faktisch weiterhin USA-lastig", "Schwellenländer (China, Indien, Taiwan) fehlen, dafür braucht es einen EM-ETF", "Währungsrisiken"],
+    "these_falsch_wenn": "Die Weltwirtschaft der Industrieländer wächst über Jahrzehnte nicht mehr. Bisher war das historisch nie der Fall.",
+    "warum_nicht_etf": "Ist der ETF. Häufige Aufteilung: ca. 70–90 % World plus 10–30 % Emerging Markets."
+  },
+  "IS3N.DE": {
+    "stand": "2026-11",
+    "kurz": "Rund 3.000 Unternehmen aus 24 Schwellenländern inkl. kleiner Firmen (IMI).",
+    "was_macht": "Bildet den MSCI Emerging Markets IMI nach: China, Indien, Taiwan, Südkorea, Brasilien, Saudi-Arabien u. a. Thesaurierend, laufende Kosten ca. 0,18 % pro Jahr.",
+    "unterschied": "Ergänzt den MSCI World um die Länder, die dort fehlen. Durch „IMI“ sind auch kleinere Unternehmen enthalten.",
+    "markt": "Schwellenländer erwirtschaften rund 40 % der Weltwirtschaftsleistung, machen aber nur gut 10 % des weltweiten Börsenwerts aus. Größte Einzelwerte: TSMC, Tencent, Samsung, SK Hynix, Alibaba.",
+    "risiken": ["Politische Risiken (China/Taiwan, Sanktionen, Kapitalverkehrskontrollen)", "Schwächere Unternehmensführung und Minderheitenschutz", "Lange Phasen mit schwacher Rendite: 2010–2020 deutlich hinter dem MSCI World", "Höhere Schwankung"],
+    "these_falsch_wenn": "Das Wirtschaftswachstum der Schwellenländer kommt dauerhaft nicht bei den Aktionären an (Verwässerung, staatliche Eingriffe).",
+    "warum_nicht_etf": "Ist der ETF. Meist als Beimischung von 10–30 % zum World gedacht."
+  },
+  "EXSA.DE": {
+    "stand": "2026-11",
+    "kurz": "Die 600 größten Unternehmen aus 17 europäischen Ländern.",
+    "was_macht": "Bildet den STOXX Europe 600 nach: Großbritannien, Frankreich, Schweiz, Deutschland, Niederlande u. a. Ausschüttend, laufende Kosten ca. 0,20 % pro Jahr.",
+    "unterschied": "Gegengewicht zur US-Lastigkeit: mehr Finanzen, Industrie, Gesundheit und Konsum, weniger Tech. Günstigere Bewertung (KGV meist ca. 13–15 statt 20+ in den USA).",
+    "markt": "Große Werte: ASML, SAP, Novo Nordisk, Nestlé, Roche, Novartis, LVMH, Siemens, Allianz, Shell, AstraZeneca.",
+    "risiken": ["Schwächeres Gewinnwachstum als in den USA über die letzten 15 Jahre", "Wenige große Tech-Gewinner", "Energiepreise und Regulierung"],
+    "these_falsch_wenn": "Europa bleibt dauerhaft wachstumsschwach, und die niedrige Bewertung ist deshalb gerechtfertigt.",
+    "warum_nicht_etf": "Ist der ETF. Sinnvoll, wenn man Europa bewusst stärker gewichten will als im MSCI World (dort ca. 15 %)."
+  },
+  "EQQQ.DE": {
+    "stand": "2026-11",
+    "kurz": "Die 100 größten Nicht-Finanzwerte der US-Börse Nasdaq.",
+    "was_macht": "Bildet den Nasdaq-100 nach. Stark technologielastig (über 50 % Tech plus Kommunikation/Konsum wie Amazon, Tesla). Ausschüttend, laufende Kosten ca. 0,30 % pro Jahr.",
+    "unterschied": "Konzentrierter und wachstumslastiger als der S&P 500, steigt im Boom stärker und fällt im Crash tiefer (2000–02: −80 %, 2022: −33 %).",
+    "markt": "Top-Werte: Nvidia, Microsoft, Apple, Amazon, Broadcom, Meta, Alphabet, Tesla.",
+    "risiken": ["Klumpenrisiko Tech/KI", "Hohe Bewertung", "Starke Überschneidung mit S&P 500 und MSCI World"],
+    "these_falsch_wenn": "Der KI-/Tech-Investitionszyklus bricht ein oder die Margen der großen Plattformen sinken deutlich.",
+    "warum_nicht_etf": "Ist ein ETF, aber kein breiter: eher eine Tech-Wette als ein Basisinvestment."
+  }
+}

@@ -12,6 +12,12 @@
     { "ab_prozent": 40, "faktor": 4, "name": "Stufe 4" },
     { "ab_prozent": 50, "faktor": 5, "name": "Stufe 5" }
   ],
+  "_hinweis_ueberhitzung": "Hinweis (kein Verkaufssignal!), wenn ein Wert weit über seiner 200-Tage-Linie liegt oder der RSI(14) sehr hoch ist. Werte in Prozent Abstand zur 200-Tage-Linie: [heiß, sehr heiß].",
+  "ueberhitzung": {
+    "aktie": { "abstand_sma200": [30, 50] },
+    "etf":   { "abstand_sma200": [15, 25] },
+    "rsi_ueber": 75
+  },
   "telegram": {
     "bei_neuer_stufe": true,
     "taegliche_zusammenfassung": false

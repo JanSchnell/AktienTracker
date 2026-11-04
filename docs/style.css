@@ -146,6 +146,25 @@ ul.clean { margin: 6px 0 0; padding-left: 18px; }
 .inv-grid tbody tr { cursor: default; }
 .trunc { max-width: 190px; overflow: hidden; text-overflow: ellipsis; }
 
+.badge.hot { background: color-mix(in srgb, #f97316 18%, transparent); color: #c2410c; font-weight: 600; }
+.badge.hot2 { background: color-mix(in srgb, #dc2626 20%, transparent); color: var(--neg); font-weight: 700; }
+.hotnote { border-left-color: #f97316; }
+.chip.add { margin-left: auto; font-weight: 600; }
+.form { display: flex; flex-wrap: wrap; gap: 10px; align-items: flex-end; }
+.form label { display: flex; flex-direction: column; gap: 4px; font-size: .8rem; color: var(--muted); flex: 1 1 160px; }
+.form input { border: 1px solid var(--line); background: var(--card); color: var(--text); padding: 7px 10px; border-radius: 8px; font: inherit; font-size: .9rem; }
+.g-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(260px, 100%), 1fr)); gap: 0 24px; }
+.g-row { display: flex; justify-content: space-between; gap: 12px; padding: 6px 0; border-bottom: 1px dashed var(--line); font-size: .9rem; }
+.qa-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(340px, 100%), 1fr)); gap: 16px 28px; }
+.qa .q { font-weight: 650; font-size: .88rem; margin-bottom: 3px; }
+.qa .a { font-size: .9rem; color: var(--text); }
+.contra { border-left: 3px solid var(--neg); }
+.checks { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(320px, 100%), 1fr)); gap: 12px 24px; }
+.check { display: flex; gap: 10px; align-items: flex-start; }
+.check .dot { margin-top: 5px; flex: none; }
+.check .q { font-weight: 600; font-size: .9rem; }
+.prose ol { padding-left: 20px; }
+
 .prose { max-width: 760px; }
 .prose p, .prose li { color: var(--text); }
 

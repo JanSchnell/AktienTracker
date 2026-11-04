@@ -47,6 +47,25 @@ function tierBadge(w) {
 
 function destroyCharts() { charts.forEach((c) => c.destroy()); charts = []; }
 
+function heatBadge(w) {
+  if (!w.heiss) return "";
+  return w.heiss === 2
+    ? `<span class="badge hot2" title="Sehr weit über der 200-Tage-Linie – Gewinnmitnahme/Positionsgröße prüfen">🔥🔥 sehr heiß</span>`
+    : `<span class="badge hot" title="Deutlich über der 200-Tage-Linie oder RSI hoch">🔥 heiß</span>`;
+}
+
+function checkBadge(w) {
+  if (!w.pruefung_anzahl) return "–";
+  const r = w.pruefung_gruen / w.pruefung_anzahl;
+  const f = r >= 0.6 && !w.pruefung_rot ? "gruen" : r >= 0.6 || w.pruefung_rot <= 1 ? "gelb" : "rot";
+  return `<span class="dot ${f}"></span> ${w.pruefung_gruen}/${w.pruefung_anzahl}`;
+}
+
+const repo = () => OV.repo || "JanSchnell/AktienTracker";
+function issueUrl(title, lines) {
+  return `https://github.com/${repo()}/issues/new?title=${encodeURIComponent(title)}&body=${encodeURIComponent(lines.join("\n"))}`;
+}
+
 // ------------------------------------------------------------ Übersicht
 
 const state = {
@@ -66,6 +85,7 @@ const COLS = [
   { key: "perf_1j", label: "1 Jahr", get: (w) => w.perf_1j, hide: true },
   { key: "kgv_erwartet", label: "KGV erw.", get: (w) => w.kgv_erwartet, hide: true },
   { key: "ampel", label: "Quartal", get: (w) => (w.ampel ? w.ampel.punkte : null), hide: true },
+  { key: "pruefung_gruen", label: "Check", get: (w) => (w.pruefung_anzahl ? w.pruefung_gruen / w.pruefung_anzahl : null), hide: true },
   { key: "naechste_zahlen", label: "Zahlen am", get: (w) => w.naechste_zahlen || "9999", hide: true },
 ];
 
@@ -79,6 +99,7 @@ function renderOverview() {
   const bald = werte.filter((w) => { const d = daysUntil(w.naechste_zahlen); return d != null && d >= 0 && d <= 14; });
   const insider = werte.filter((w) => w.insider_kaeufe_90t > 0);
   const nahAth = werte.filter((w) => w.rueckgang_ath < 3);
+  const heiss = werte.filter((w) => w.heiss > 0);
 
   $app.innerHTML = `
     <div class="grid stats">
@@ -88,6 +109,8 @@ function renderOverview() {
         <div class="sub">${esc(tiefste.name)}</div></div>
       <div class="card stat"><div class="label">Nahe Allzeithoch (&lt; 3 %)</div><div class="value">${nahAth.length}</div>
         <div class="sub">${esc(nahAth.slice(0, 3).map((w) => w.name).join(", ") || "–")}</div></div>
+      <div class="card stat"><div class="label">Heiß gelaufen 🔥</div><div class="value">${heiss.length}</div>
+        <div class="sub">${esc(heiss.slice(0, 3).map((w) => w.name).join(", ") || "keine")}</div></div>
       <div class="card stat"><div class="label">Quartalszahlen in 14 Tagen</div><div class="value">${bald.length}</div>
         <div class="sub">${esc(bald.slice(0, 3).map((w) => w.name).join(", ") || "–")}</div></div>
       <div class="card stat"><div class="label">Insider-Käufe (90 Tage)</div><div class="value">${insider.length}</div>
@@ -97,6 +120,18 @@ function renderOverview() {
     <div class="toolbar">
       ${kats.map((k) => `<button class="chip ${k === state.kat ? "on" : ""}" data-kat="${esc(k)}">${esc(k)}</button>`).join("")}
       <input type="search" id="q" placeholder="Suchen …" value="${esc(state.q)}">
+      <button class="chip add" id="addBtn">＋ Wert hinzufügen</button>
+    </div>
+    <div class="card" id="addForm" hidden style="margin-bottom:12px">
+      <h3>Wert zur Watchlist hinzufügen</h3>
+      <div class="form">
+        <label>Name oder Ticker<input id="fQ" placeholder="z. B. Coca-Cola, KO, Rheinmetall, RHM.DE"></label>
+        <label>Kategorie<select id="fKat">${[...kats.slice(1), "Eigene Auswahl"].filter((v, i, a) => a.indexOf(v) === i).map((k) => `<option ${k === "Eigene Auswahl" ? "selected" : ""}>${esc(k)}</option>`).join("")}</select></label>
+        <label>Typ<select id="fTyp"><option value="">automatisch</option><option value="aktie">Aktie</option><option value="etf">ETF</option></select></label>
+        <button class="chip on" id="fGo">Weiter zu GitHub →</button>
+      </div>
+      <p class="muted small" style="margin:10px 0 0">Es öffnet sich GitHub mit einer vorausgefüllten Anfrage. Dort nur noch auf <strong>„Create“</strong> tippen (du musst bei GitHub angemeldet sein).
+        Der Ticker wird automatisch gesucht, nach ca. 3–5 Minuten erscheint der Wert hier. Bei Unklarheiten den genauen Yahoo-Ticker angeben (z. B. <code>RHM.DE</code>).</p>
     </div>
     <div class="tbl-wrap"><table id="tbl"><thead></thead><tbody></tbody></table></div>
     <p class="muted small">Rückgang und Stufe beziehen sich auf den höchsten Schlusskurs der gesamten Historie in Handelswährung.
@@ -107,6 +142,16 @@ function renderOverview() {
     b.addEventListener("click", () => { state.kat = b.dataset.kat; store.set("kat", state.kat); renderOverview(); }));
   const q = document.getElementById("q");
   q.addEventListener("input", () => { state.q = q.value; renderRows(); });
+  const form = document.getElementById("addForm");
+  document.getElementById("addBtn").addEventListener("click", () => { form.hidden = !form.hidden; if (!form.hidden) document.getElementById("fQ").focus(); });
+  document.getElementById("fGo").addEventListener("click", () => {
+    const v = document.getElementById("fQ").value.trim();
+    if (!v) return document.getElementById("fQ").focus();
+    window.open(issueUrl(`Watchlist: hinzufügen ${v}`, [
+      "aktion: hinzufuegen", `suche: ${v}`,
+      `kategorie: ${document.getElementById("fKat").value}`, `typ: ${document.getElementById("fTyp").value}`,
+    ]), "_blank", "noopener");
+  });
   renderRows();
 }
 
@@ -127,7 +172,8 @@ function renderRows() {
   tbl.querySelector("tbody").innerHTML = rows.map((w) => {
     const z = daysUntil(w.naechste_zahlen);
     return `<tr data-s="${esc(w.symbol)}">
-      <td><div class="name">${esc(w.name)} ${w.insider_kaeufe_90t ? `<span class="badge buy" title="Insider-Käufe in den letzten 90 Tagen">Insider</span>` : ""}</div>
+      <td><div class="name">${esc(w.name)} ${heatBadge(w)} ${w.insider_kaeufe_90t ? `<span class="badge buy" title="Insider-Käufe in den letzten 90 Tagen">Insider</span>` : ""}
+          ${w.politiker_90t ? `<span class="badge" title="Politiker-Trades in den letzten 90 Tagen gemeldet">🏛 ${w.politiker_90t}</span>` : ""}</div>
           <div class="sym">${esc(w.symbol)} · ${esc(w.kategorie)}</div></td>
       <td>${fmt(w.kurs)} <span class="sym">${esc(w.waehrung || "")}</span></td>
       <td class="${cls(w.tag_pct)}">${fmtPct(w.tag_pct, 2)}</td>
@@ -139,6 +185,7 @@ function renderRows() {
       <td class="hide-m ${cls(w.perf_1j)}">${fmtPct(w.perf_1j)}</td>
       <td class="hide-m">${fmt(w.kgv_erwartet, 1)}</td>
       <td class="hide-m">${w.ampel ? `<span class="dot ${w.ampel.farbe}" title="${esc(w.ampel.gruende.join(" · "))}"></span>` : "–"}</td>
+      <td class="hide-m" title="Grüne Antworten im Kennzahlen-Check">${checkBadge(w)}</td>
       <td class="hide-m">${w.naechste_zahlen ? date(w.naechste_zahlen) + (z != null && z >= 0 && z <= 14 ? ` <span class="badge watch">${z} T</span>` : "") : "–"}</td>
     </tr>`;
   }).join("") || `<tr><td colspan="${COLS.length}" class="muted">Keine Treffer</td></tr>`;
@@ -189,7 +236,11 @@ async function renderDetail(sym) {
       ${kv("Abstand 200-Tage-Linie", fmtPct(w.abstand_sma200), cls(w.abstand_sma200))}
       ${kv("Seit Jahresbeginn", fmtPct(w.perf_ytd), cls(w.perf_ytd))}
       ${kv("1 Jahr / 5 Jahre", `<span class="${cls(w.perf_1j)}">${fmtPct(w.perf_1j, 0)}</span> / <span class="${cls(w.perf_5j)}">${fmtPct(w.perf_5j, 0)}</span>`)}
+      ${kv("RSI (14 Tage)", `${fmt(w.rsi, 0)} <span class="small muted">${w.rsi >= 70 ? "überkauft" : w.rsi <= 30 ? "überverkauft" : "neutral"}</span>`)}
     </div>
+    ${w.heiss ? `<div class="note hotnote">${heatBadge(w)} <strong>${esc(w.name)} liegt ${fmtPct(w.abstand_sma200, 0)} über der 200-Tage-Linie</strong> (RSI ${fmt(w.rsi, 0)}).
+      Kein Verkaufssignal, aber ein guter Moment, die eigene These und die Positionsgröße zu prüfen. Mehr dazu unter <a href="#/regeln">Regeln</a>.</div>` : ""}
+    ${glance(w, f, d.profil)}
 
     <h2>Kursverlauf</h2>
     <div class="card">
@@ -198,11 +249,14 @@ async function renderDetail(sym) {
       <p class="muted small" style="margin:8px 0 0">Gestrichelt: Allzeithoch und die Kurse, bei denen deine Stufen beginnen. Ältere Daten als Wochenkurse.</p>
     </div>`;
 
+  html += profileSection(d.profil, w);
+  if (f) html += checkSection(f) + mgmtSection(f);
+
   if (f) {
     const q = f.quartale || [];
     const zTage = daysUntil(f.naechste_zahlen);
     html += `
-    <h2>Fundamentaldaten</h2>
+    <h2>Bewertung & Kennzahlen</h2>
     <div class="grid kv">
       ${kv("Marktkapitalisierung", big(f.marktkap) + " " + esc(cur))}
       ${kv("KGV / erwartet", `${fmt(f.kgv, 1)} / ${fmt(f.kgv_erwartet, 1)}`)}
@@ -223,13 +277,15 @@ async function renderDetail(sym) {
       <span class="muted small">(${esc(date(q[q.length - 1].periode))})</span>
       <ul class="clean small">${f.ampel.gruende.map((g) => `<li>${esc(g)}</li>`).join("")}</ul></div></div>` : ""}
 
+    ${yearsSection(f, cur)}
+
     ${q.length ? `
+    <h2>Quartale</h2>
     <div class="grid two" style="margin-top:12px">
       <div class="card"><h3>Umsatz & Nettogewinn</h3><div class="chart-box sm"><canvas id="cRev"></canvas></div></div>
       <div class="card"><h3>Margen</h3><div class="chart-box sm"><canvas id="cMarg"></canvas></div></div>
     </div>
-    <h2>Quartalszahlen</h2>
-    <div class="tbl-wrap"><table>
+    <div class="tbl-wrap" style="margin-top:12px"><table>
       <thead><tr><th>Quartal</th><th>Umsatz</th><th>J/J</th><th>Q/Q</th><th>Brutto-M.</th><th>Op. Marge</th><th>Nettogewinn</th><th>EPS</th><th>EPS J/J</th><th>Free Cashflow</th></tr></thead>
       <tbody>${[...q].reverse().map((e) => `<tr style="cursor:default">
         <td>${date(e.periode)}</td><td>${big(e.umsatz)}</td>
@@ -255,6 +311,10 @@ async function renderDetail(sym) {
       Mehrere Insider, die kurz nacheinander kaufen („Cluster“), sind das stärkste Signal.</p>`;
   }
 
+  if (d.politiker && d.politiker.length) {
+    html += `<h2>Politiker-Trades (US-Kongress)</h2>${politikTable(d.politiker, false)}`;
+  }
+
   // 13F: Wer von den beobachteten Investoren hält diesen Wert?
   const halter = holdersOf(w);
   if (halter.length) {
@@ -265,7 +325,7 @@ async function renderDetail(sym) {
   }
 
   if (f && f.beschreibung) {
-    html += `<h2>Über das Unternehmen</h2><div class="card"><div class="desc small" id="desc">${esc(f.beschreibung)}</div>
+    html += `<h2>Offizielle Kurzbeschreibung <span class="muted small">(Yahoo, englisch)</span></h2><div class="card"><div class="desc small" id="desc">${esc(f.beschreibung)}</div>
       <button class="chip" id="more" style="margin-top:8px">Mehr anzeigen</button></div>`;
   }
 
@@ -277,7 +337,9 @@ async function renderDetail(sym) {
       <a href="https://www.capitoltrades.com/issuers?search=${encodeURIComponent(w.symbol)}" target="_blank" rel="noopener">Politiker-Trades (Capitol Trades)</a>
       <a href="https://www.sec.gov/cgi-bin/browse-edgar?action=getcompany&company=${encodeURIComponent(w.name)}&type=10-Q" target="_blank" rel="noopener">SEC-Filings</a>` : ""}
     ${w.typ === "etf" ? `<a href="https://www.justetf.com/de/search.html?query=${encodeURIComponent(w.langname || w.name)}" target="_blank" rel="noopener">justETF</a>` : ""}
-  </div>`;
+  </div>
+  <p class="small" style="margin-top:20px"><a class="neg" href="${issueUrl(`Watchlist: entfernen ${w.symbol}`, ["aktion: entfernen", `symbol: ${w.symbol}`])}" target="_blank" rel="noopener">${esc(w.name)} aus der Watchlist entfernen …</a>
+    <span class="muted">(öffnet GitHub, dort „Create“ tippen)</span></p>`;
 
   $app.innerHTML = html;
   const desc = document.getElementById("desc");
@@ -289,6 +351,108 @@ async function renderDetail(sym) {
     drawPrice(d, b.dataset.r);
   }));
   if (f && f.quartale && f.quartale.length) drawQuarters(f.quartale, cur);
+}
+
+// ------------------------------------------------------------ Detail-Bausteine
+
+function glance(w, f, p) {
+  const ceo = f && (f.management || []).find((o) => o.ceo);
+  const net = f && f.schulden != null && f.cash != null ? f.schulden - f.cash : null;
+  const lev = net != null && f.ebitda > 0 ? net / f.ebitda : null;
+  const cur = w.waehrung || "";
+  const bw = f && f.bilanzwaehrung && f.bilanzwaehrung !== cur ? f.bilanzwaehrung : cur;
+  const row = (k, v) => `<div class="g-row"><span class="muted">${k}</span><span>${v}</span></div>`;
+  if (!f && !p) return "";
+  return `<h2>Auf einen Blick</h2><div class="card glance">
+    ${p && p.kurz ? `<p style="margin:0 0 10px"><strong>${esc(p.kurz)}</strong></p>` : ""}
+    <div class="g-grid">
+      ${ceo ? row("CEO", `${esc(ceo.name)}${ceo.alter ? ` <span class="muted small">(${ceo.alter})</span>` : ""}`) : ""}
+      ${f && f.mitarbeiter ? row("Mitarbeiter", fmt(f.mitarbeiter, 0)) : ""}
+      ${f && f.marktkap ? row("Börsenwert", big(f.marktkap) + " " + esc(cur)) : ""}
+      ${f && f.schulden != null ? row("Schulden", big(f.schulden) + " " + esc(bw)) : ""}
+      ${f && f.cash != null ? row("Cash", big(f.cash) + " " + esc(bw)) : ""}
+      ${net != null ? row(net > 0 ? "Nettoschulden" : "Nettocash", `<span class="${net > 0 ? "" : "pos"}">${big(Math.abs(net))} ${esc(bw)}</span>` + (lev != null && net > 0 ? ` <span class="small muted">(${fmt(lev, 1)}× EBITDA)</span>` : "")) : ""}
+      ${f && f.insider_anteil != null ? row("Anteil Insider", fmt(f.insider_anteil * 100, 1) + " %") : ""}
+      ${w.pruefung_anzahl ? row("Kennzahlen-Check", `${checkBadge(w)} grün`) : ""}
+      ${row("Status", w.heiss ? heatBadge(w) : w.stufe ? tierBadge(w) : `<span class="muted">normal</span>`)}
+    </div></div>`;
+}
+
+const PROFIL_FRAGEN = [
+  ["was_macht", "Was macht das Unternehmen?"],
+  ["geld", "Wie verdient es sein Geld?"],
+  ["warum_kunden", "Warum kaufen Kunden dort?"],
+  ["zukunft", "Warum gibt es das Unternehmen in 5–10 Jahren noch?"],
+  ["unterschied", "Was unterscheidet es von der Konkurrenz?"],
+  ["markt", "Wie groß ist der Markt – und wächst er?"],
+  ["plaene", "Welche Pläne hat das Unternehmen?"],
+  ["ceo", "Wer ist der CEO?"],
+  ["management", "Was hat das Management bisher gemacht? Wie setzt es Kapital ein?"],
+];
+
+function profileSection(p, w) {
+  if (!p) {
+    return w.typ === "etf" ? "" : `<h2>Das Unternehmen verstehen</h2><div class="card muted small">Für diesen Wert gibt es noch kein ausführliches Profil.
+      Bitte Claude, eins zu ergänzen (Datei <code>config/profiles/</code>). Die Kennzahlen unten werden trotzdem automatisch ausgewertet.</div>`;
+  }
+  const qa = PROFIL_FRAGEN.filter(([k]) => p[k]).map(([k, q]) =>
+    `<div class="qa"><div class="q">${q}</div><div class="a">${esc(p[k])}</div></div>`).join("");
+  return `<h2>${w.typ === "etf" ? "Was steckt drin?" : "Das Unternehmen verstehen"}</h2>
+    <div class="card"><div class="qa-grid">${qa}</div></div>
+    <div class="grid two" style="margin-top:12px">
+      <div class="card contra"><h3>Gegenargumente & Risiken</h3>
+        <ul class="clean small">${(p.risiken || []).map((r) => `<li>${esc(r)}</li>`).join("")}</ul>
+        ${p.these_falsch_wenn ? `<p class="small" style="margin:10px 0 0"><strong>Die These wäre falsch, wenn …</strong> ${esc(p.these_falsch_wenn)}</p>` : ""}</div>
+      <div class="card"><h3>Warum dieses Unternehmen – und nicht einfach ein ETF?</h3>
+        <p class="small" style="margin:0">${esc(p.warum_nicht_etf || "–")}</p></div>
+    </div>
+    <p class="muted small">Profil Stand ${esc(p.stand || "–")}, von Claude zusammengestellt. Qualitative Einschätzung, keine Anlageberatung. Prüfe wichtige Punkte in den Originalquellen (Geschäftsbericht, Investor Relations).</p>`;
+}
+
+function checkSection(f) {
+  const p = f.pruefung || [];
+  if (!p.length) return "";
+  return `<h2>Kennzahlen-Check</h2>
+    <div class="card"><div class="checks">${p.map((x) => `<div class="check"><span class="dot ${x.farbe}"></span>
+      <div><div class="q">${esc(x.frage)}</div><div class="small">${esc(x.antwort)}</div></div></div>`).join("")}</div></div>
+    <p class="muted small">Automatisch aus den Jahreszahlen berechnet (Grün = günstig, Gelb = neutral, Rot = genauer hinschauen). Grenzwerte sind Faustregeln, je nach Branche ist anderes normal.</p>`;
+}
+
+function mgmtSection(f) {
+  const m = f.management || [];
+  if (!m.length) return "";
+  return `<h2>Management</h2><div class="tbl-wrap"><table><thead><tr><th>Name</th><th>Position</th><th>Alter</th></tr></thead><tbody>
+    ${m.map((o) => `<tr style="cursor:default"><td>${esc(o.name)} ${o.ceo ? `<span class="badge watch">CEO</span>` : ""}</td><td class="trunc" style="max-width:420px" title="${esc(o.titel)}">${esc(o.titel)}</td><td>${o.alter || "–"}</td></tr>`).join("")}
+    </tbody></table></div><p class="muted small">Live-Daten von Yahoo Finance.</p>`;
+}
+
+function yearsSection(f, cur) {
+  const j = f.jahre || [];
+  if (!j.length) return "";
+  const bw = f.bilanzwaehrung || cur;
+  const cols = [
+    ["Umsatz", (e) => big(e.umsatz)], ["Nettogewinn", (e) => `<span class="${cls(e.nettogewinn)}">${big(e.nettogewinn)}</span>`],
+    ["EPS", (e) => fmt(e.eps)], ["Op. Marge", (e) => fmtRatio(e.operative_marge)],
+    ["Free Cashflow", (e) => `<span class="${cls(e.fcf)}">${big(e.fcf)}</span>`], ["CapEx", (e) => big(e.capex == null ? null : Math.abs(e.capex))],
+    ["Schulden", (e) => big(e.schulden)], ["Cash", (e) => big(e.cash)],
+    ["Aktien (Mio.)", (e) => fmt(e.aktien == null ? null : e.aktien / 1e6, 0)], ["Rückkäufe", (e) => big(e.rueckkaeufe == null ? null : Math.abs(e.rueckkaeufe))],
+  ];
+  return `<h2>Jahreszahlen</h2>
+    <div class="tbl-wrap"><table><thead><tr><th>Geschäftsjahr</th>${cols.map(([c]) => `<th>${c}</th>`).join("")}</tr></thead>
+    <tbody>${[...j].reverse().map((e) => `<tr style="cursor:default"><td>${e.jahr}</td>${cols.map(([, g]) => `<td>${g(e)}</td>`).join("")}</tr>`).join("")}</tbody></table></div>
+    <p class="muted small">Beträge in ${esc(bw)}. Yahoo liefert kostenlos die letzten ~4 Geschäftsjahre. Für 10 Jahre: Geschäftsberichte auf der Investor-Relations-Seite.</p>`;
+}
+
+function politikTable(list, withName) {
+  return `<div class="tbl-wrap"><table><thead><tr><th>Gemeldet</th>${withName ? "<th>Wert</th>" : ""}<th>Politiker</th><th>Art</th><th>Betrag ($)</th><th>Handelstag</th></tr></thead><tbody>
+    ${list.map((x) => `<tr style="cursor:default"><td>${date(x.gemeldet)}</td>
+      ${withName ? `<td><a href="#/wert/${encodeURIComponent(x.symbol)}">${esc(x.name || x.symbol)}</a></td>` : ""}
+      <td>${esc(x.person)} <span class="sym">${esc((x.kammer || "").replace("house", "Repräsentantenhaus").replace("senate", "Senat"))} ${esc(x.staat || "")}</span></td>
+      <td><span class="badge ${x.art === "kauf" ? "buy" : x.art === "verkauf" ? "sell" : ""}">${x.art === "kauf" ? "Kauf" : x.art === "verkauf" ? "Verkauf" : esc(x.art || "–")}</span></td>
+      <td>${esc(x.betrag || "–")}</td><td>${date(x.datum)}</td></tr>`).join("")}
+    </tbody></table></div>
+    <p class="muted small">Quelle: STOCK-Act-Meldungen (House Clerk / Senate eFD) über die freie Bargo-API. Meldung bis zu 45 Tage nach dem Handel, Beträge nur als Spanne.
+      Auffälliges Timing ist kein Beweis für Insiderwissen und kein Kaufsignal.</p>`;
 }
 
 function chartDefaults() {
@@ -391,8 +555,26 @@ function changeBadge(p) {
   return `<span class="badge">=</span>`;
 }
 
+// Unternehmen, die mehrere der beobachteten Investoren gleichzeitig halten
+function multiHolders() {
+  const map = new Map();
+  INV.investoren.forEach((inv) => inv.positionen.filter((p) => p.wert > 0 && p.anteil >= 0.5).forEach((p) => {
+    const key = (p.name || "").toUpperCase().replace(/\b(INC|CORP|CORPORATION|CO|LTD|PLC|HLDGS?|HOLDINGS?|COM|CL [A-C]|NEW)\b\.?/g, "").replace(/\s+/g, " ").trim();
+    if (!map.has(key)) map.set(key, { name: p.name, inv: [] });
+    if (!map.get(key).inv.includes(inv.name)) map.get(key).inv.push(inv.name);
+  }));
+  const rows = [...map.values()].filter((x) => x.inv.length >= 2).sort((a, b) => b.inv.length - a.inv.length).slice(0, 20);
+  if (!rows.length) return "";
+  return `<h2>Von mehreren Investoren gehalten</h2>
+    <p class="muted small prose">Positionen mit mindestens 0,5 % Depotanteil, die mindestens zwei der beobachteten Investoren unabhängig voneinander halten.</p>
+    <div class="tbl-wrap"><table><thead><tr><th>Unternehmen</th><th>Anzahl</th><th>Investoren</th></tr></thead><tbody>
+    ${rows.map((x) => { const m = matchWatch(x.name); return `<tr style="cursor:default"><td>${m ? `<a href="#/wert/${encodeURIComponent(m.symbol)}">${esc(x.name)}</a> <span class="badge watch">Watchlist</span>` : esc(x.name)}</td>
+      <td>${x.inv.length}</td><td style="white-space:normal">${esc(x.inv.join(", "))}</td></tr>`; }).join("")}
+    </tbody></table></div>`;
+}
+
 function renderInvestors() {
-  if (!INV || !INV.investoren.length) { $app.innerHTML = `<p>Noch keine Investoren-Daten.</p>`; return; }
+  if (!INV || (!INV.investoren.length && !(INV.politiker || []).length)) { $app.innerHTML = `<p>Noch keine Investoren-Daten – der nächste Lauf lädt sie.</p>`; return; }
   const filt = store.get("invFilt", "aenderungen");
   const blocks = INV.investoren.map((inv) => {
     const alt = inv.stichtag < new Date(Date.now() - 200 * 864e5).toISOString().slice(0, 10);
@@ -425,9 +607,11 @@ function renderInvestors() {
         .map(([k, l]) => `<button class="chip ${k === filt ? "on" : ""}" data-f="${k}">${l}</button>`).join("")}
     </div>
     <div class="grid inv-grid">${blocks}</div>
-    <div class="note small" style="margin-top:20px"><strong>Politiker-Trades:</strong> US-Abgeordnete müssen Aktiengeschäfte nach dem STOCK Act melden.
-      Dafür gibt es leider keine verlässliche kostenlose Schnittstelle. Auf jeder Unternehmensseite findest du deshalb einen Link zu
-      <a href="https://www.capitoltrades.com/trades" target="_blank" rel="noopener">Capitol Trades</a>.</div>`;
+    ${multiHolders()}
+    <h2>Politiker-Trades in deiner Watchlist (letzte 90 Tage)</h2>
+    <p class="muted small prose">US-Kongressmitglieder (inkl. Ehepartner) müssen Aktiengeschäfte über 1.000 $ nach dem STOCK Act melden.
+      Spannend als Ideenquelle, aber laut den Notizen deines Freundes: Hintergründe verstehen, nicht blind folgen.</p>
+    ${INV.politiker && INV.politiker.length ? politikTable(INV.politiker.slice(0, 60), true) : `<p class="muted">Keine gemeldeten Trades in den letzten 90 Tagen.</p>`}`;
   $app.querySelectorAll("[data-f]").forEach((b) => b.addEventListener("click", () => { store.set("invFilt", b.dataset.f); renderInvestors(); }));
 }
 
@@ -461,6 +645,31 @@ function renderRules() {
       <li><strong>Insider-Käufe</strong> (Manager kaufen eigene Aktien mit eigenem Geld) zeigen in Studien eine Überrendite, besonders wenn mehrere gleichzeitig kaufen.
         Verkäufe sagen dagegen wenig aus.</li>
     </ul>
+    <h2>Wann verkaufen? Hinweise bei Überhitzung</h2>
+    <p>Das Tool markiert Werte als <span class="badge hot">🔥 heiß</span> bzw. <span class="badge hot2">🔥🔥 sehr heiß</span>, wenn sie weit über ihrer 200-Tage-Linie liegen
+      oder der RSI sehr hoch ist. Dafür gibt es auch eine Telegram-Nachricht. Aktuelle Grenzen:</p>
+    <div class="tbl-wrap"><table><thead><tr><th>Typ</th><th>🔥 heiß ab</th><th>🔥🔥 sehr heiß ab</th></tr></thead><tbody>
+      ${["aktie", "etf"].map((t) => { const g = ((r.ueberhitzung || {})[t] || {}).abstand_sma200 || [30, 50];
+        return `<tr style="cursor:default"><td>${t === "etf" ? "ETF" : "Aktie"}</td><td>+${g[0]} % über 200-Tage-Linie</td><td>+${g[1]} %</td></tr>`; }).join("")}
+      <tr style="cursor:default"><td>Zusätzlich</td><td colspan="2">RSI(14) ≥ ${(r.ueberhitzung || {}).rsi_ueber || 75} (stark überkauft)</td></tr>
+    </tbody></table></div>
+    <p><strong>Wichtig: Das ist bewusst kein Verkaufssignal.</strong> Was Forschung und Praxis dazu sagen:</p>
+    <ul>
+      <li><strong>Gewinner zu früh zu verkaufen ist einer der häufigsten Anlegerfehler</strong> („Dispositionseffekt“). In einer bekannten Studie (Odean, 1998) entwickelten sich die verkauften Gewinneraktien
+        im Folgejahr besser als die behaltenen Verliereraktien. Starke Unternehmen bleiben oft lange „überkauft“.</li>
+      <li><strong>Steuern:</strong> Jeder Verkauf mit Gewinn kostet in Deutschland ~26,4 % Abgeltungsteuer inkl. Soli (über dem Freibetrag von 1.000 €).
+        Wer hält, lässt den Steuerbetrag weiter mitarbeiten.</li>
+      <li><strong>Breite ETFs</strong> verkauft man in der Regel nicht wegen hoher Kurse, sondern erst, wenn man das Geld braucht (oder zum Umschichten).</li>
+      <li><strong>Gute Gründe für einen (Teil-)Verkauf einer Aktie</strong> sind eher:
+        <ol>
+          <li>Die Investmentthese ist kaputt (Umsatz bricht ein, Burggraben weg, Management enttäuscht). Steht im Profil unter „Die These wäre falsch, wenn …“.</li>
+          <li>Die Position ist durch den Anstieg zu groß geworden, z. B. über 10–15 % des Depots. Dann ist <em>Rebalancing</em> (teilweise zurückschneiden) ein bewährter Ansatz.</li>
+          <li>Die Bewertung ist extrem geworden (z. B. KGV weit über dem eigenen Durchschnitt und dem der Konkurrenz), während das Wachstum nachlässt.</li>
+          <li>Es gibt eine klar bessere Verwendung für das Geld.</li>
+        </ol></li>
+      <li>Eine einfache Faustregel mancher Anleger: Bei „sehr heiß“ einen <em>kleinen Teil</em> (z. B. 10–25 %) mitnehmen und den Rest laufen lassen. Das ist ein Kompromiss zwischen Gier und Angst, keine optimale Strategie.</li>
+    </ul>
+
     <div class="note small">Dieses Tool zeigt Daten und wendet deine selbst gewählten Regeln an. Es ist keine Anlageberatung und kauft oder verkauft nichts.
       Die Beträge sind Beispielwerte, entscheide selbst, was zu deiner Situation passt.</div>
   </div>`;

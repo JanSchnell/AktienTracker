@@ -25,9 +25,12 @@ CONFIG = ROOT / "config"
 OUT = ROOT / "docs" / "data"
 STATE_FILE = ROOT / "state" / "state.json"
 
-SEC_UA = os.environ.get("SEC_USER_AGENT") or "AktienTracker research-tool admin@aktientracker.invalid"
-TG_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN")
-TG_CHAT = os.environ.get("TELEGRAM_CHAT_ID")
+_SEC_RAW = os.environ.get("SEC_USER_AGENT") or ""
+# Zeilenumbrüche/Tabs aus dem Secret entfernen, sonst lehnt requests den Header ab
+SEC_UA = " ".join(_SEC_RAW.split()) or "AktienTracker research-tool admin@aktientracker.invalid"
+TG_TOKEN = (os.environ.get("TELEGRAM_BOT_TOKEN") or "").strip()
+TG_CHAT = (os.environ.get("TELEGRAM_CHAT_ID") or "").strip()
+CONGRESS_API = "https://www.bargo.ai/free-apis/congress/v1"
 
 # Hysterese: eine Stufe gilt erst wieder als "verlassen", wenn der Rückgang
 # so viele Prozentpunkte unter ihre Schwelle fällt. Verhindert Alarm-Spam.
@@ -58,6 +61,21 @@ def clean(x):
     return None if math.isnan(f) or math.isinf(f) else f
 
 
+def fmt_pct(v):
+    return "–" if v is None else f"{v:+.1f} %"
+
+
+def load_profiles():
+    """Unternehmensprofile aus config/profiles/*.json zu {symbol: profil} zusammenführen."""
+    out = {}
+    for p in sorted((CONFIG / "profiles").glob("*.json")):
+        try:
+            out.update({k: v for k, v in load_json(p, {}).items() if not k.startswith("_")})
+        except Exception as e:
+            print("Profil-Datei fehlerhaft:", p.name, e)
+    return out
+
+
 def safe_name(symbol):
     return re.sub(r"[^A-Za-z0-9_-]", "_", symbol)
 
@@ -75,6 +93,30 @@ def pct(a, b):
     if a is None or b in (None, 0):
         return None
     return (a / b - 1) * 100
+
+
+def scrub(msg):
+    """Geheimnisse (z. B. E-Mail aus SEC_USER_AGENT) aus Fehlermeldungen entfernen – die landen öffentlich."""
+    msg = str(msg)
+    for s in {_SEC_RAW, SEC_UA, TG_TOKEN, *(_SEC_RAW.split())}:
+        if s and len(s) > 3:
+            msg = msg.replace(s, "***").replace(repr(s)[1:-1], "***")
+    return re.sub(r"[\w.+-]+@[\w-]+\.[\w.]+", "***", msg)[:300]
+
+
+def cagr(first, last, years):
+    if first is None or last is None or years <= 0 or first <= 0 or last <= 0:
+        return None
+    return ((last / first) ** (1 / years) - 1) * 100
+
+
+def rsi(close, n=14):
+    d = close.diff()
+    up = d.clip(lower=0).ewm(alpha=1 / n, adjust=False).mean()
+    down = (-d.clip(upper=0)).ewm(alpha=1 / n, adjust=False).mean()
+    rs = up / down
+    v = float((100 - 100 / (1 + rs)).iloc[-1])
+    return None if math.isnan(v) else v
 
 
 # ---------------------------------------------------------------- Telegram
@@ -114,6 +156,7 @@ def price_block(hist, stufen):
     ytd = close[close.index.year < last_date.year]
     drawdown = (1 - last / ath) * 100
     return {
+        "rsi": rsi(close),
         "kurs": last,
         "datum": last_date.strftime("%Y-%m-%d"),
         "tag_pct": pct(last, prev),
@@ -159,6 +202,161 @@ def pick_row(df, names):
         if df is not None and n in df.index:
             return df.loc[n]
     return None
+
+
+def by_year(df, names):
+    """{jahr: wert} aus einer Jahresbilanz-Zeile."""
+    row = pick_row(df, names)
+    if row is None:
+        return {}
+    return {c.year: clean(v) for c, v in row.items() if clean(v) is not None}
+
+
+def annual(t):
+    """Jahreszahlen der letzten ~4 Geschäftsjahre (mehr liefert Yahoo kostenlos nicht)."""
+    try:
+        inc, bs, cf = t.income_stmt, t.balance_sheet, t.cashflow
+    except Exception:
+        return []
+    if inc is None or inc.empty:
+        return []
+    f = {
+        "umsatz": by_year(inc, ROWS_INCOME["umsatz"]),
+        "operatives_ergebnis": by_year(inc, ROWS_INCOME["operatives_ergebnis"]),
+        "nettogewinn": by_year(inc, ROWS_INCOME["nettogewinn"]),
+        "eps": by_year(inc, ROWS_INCOME["eps"]),
+        "ebitda": by_year(inc, ["EBITDA", "Normalized EBITDA"]),
+        "schulden": by_year(bs, ["Total Debt"]),
+        "cash": by_year(bs, ["Cash Cash Equivalents And Short Term Investments", "Cash And Cash Equivalents"]),
+        "eigenkapital": by_year(bs, ["Stockholders Equity", "Common Stock Equity"]),
+        "aktien": by_year(bs, ["Ordinary Shares Number", "Share Issued"]) or by_year(inc, ["Diluted Average Shares"]),
+        "ocf": by_year(cf, ["Operating Cash Flow"]),
+        "capex": by_year(cf, ["Capital Expenditure"]),
+        "fcf": by_year(cf, ["Free Cash Flow"]),
+        "rueckkaeufe": by_year(cf, ["Repurchase Of Capital Stock"]),
+        "dividenden": by_year(cf, ["Cash Dividends Paid", "Common Stock Dividend Paid"]),
+        "sbc": by_year(cf, ["Stock Based Compensation"]),
+    }
+    jahre = sorted({y for v in f.values() for y in v})
+    out = []
+    for y in jahre:
+        e = {"jahr": y, **{k: v.get(y) for k, v in f.items()}}
+        if e["umsatz"] is None and e["nettogewinn"] is None:
+            continue
+        u = e["umsatz"]
+        e["operative_marge"] = e["operatives_ergebnis"] / u if u and e["operatives_ergebnis"] is not None else None
+        e["nettomarge"] = e["nettogewinn"] / u if u and e["nettogewinn"] is not None else None
+        e["capex_quote"] = abs(e["capex"]) / u if u and e["capex"] is not None else None
+        e["netto_schulden"] = (e["schulden"] or 0) - (e["cash"] or 0) if e["schulden"] is not None or e["cash"] is not None else None
+        out.append(e)
+    return out
+
+
+def pruefung(jahre, info, sektor):
+    """Beantwortet die Kennzahlen-Fragen automatisch: Liste aus {frage, antwort, farbe}."""
+    out = []
+
+    def add(frage, antwort, farbe):
+        out.append({"frage": frage, "antwort": antwort, "farbe": farbe})
+
+    if len(jahre) >= 2:
+        a, b = jahre[0], jahre[-1]
+        n = b["jahr"] - a["jahr"]
+        zr = f"{a['jahr']}–{b['jahr']}"
+        g = cagr(a["umsatz"], b["umsatz"], n)
+        if g is not None:
+            add("Steigt der Umsatz?", f"{g:+.1f} % pro Jahr ({zr})", "gruen" if g >= 8 else "gelb" if g >= 0 else "rot")
+        gn = cagr(a["nettogewinn"], b["nettogewinn"], n)
+        if g is not None and gn is not None:
+            add("Wächst der Gewinn schneller als der Umsatz?",
+                f"Gewinn {gn:+.1f} % vs. Umsatz {g:+.1f} % pro Jahr",
+                "gruen" if gn > g + 1 else "gelb" if gn >= g - 3 else "rot")
+        elif b["nettogewinn"] is not None and b["nettogewinn"] < 0:
+            add("Wächst der Gewinn schneller als der Umsatz?", "Unternehmen schreibt aktuell Verluste", "rot")
+        if a["operative_marge"] is not None and b["operative_marge"] is not None:
+            d = (b["operative_marge"] - a["operative_marge"]) * 100
+            add("Verbessern sich die Margen?",
+                f"op. Marge {a['operative_marge'] * 100:.1f} % → {b['operative_marge'] * 100:.1f} % ({d:+.1f} Pp.)",
+                "gruen" if d >= 2 else "gelb" if d > -2 else "rot")
+        if a["schulden"] is not None and b["schulden"] is not None and a["schulden"] > 0:
+            d = pct(b["schulden"], a["schulden"])
+            add("Steigen die Schulden?", f"{d:+.0f} % seit {a['jahr']}", "gruen" if d <= 0 else "gelb" if d <= 30 else "rot")
+        sh = cagr(a["aktien"], b["aktien"], n)
+        if sh is not None:
+            add("Werden Aktionäre verwässert?",
+                f"Aktienanzahl {sh:+.1f} % pro Jahr" + (" (Rückkäufe)" if sh <= -0.5 else ""),
+                "gruen" if sh <= -0.5 else "gelb" if sh <= 1 else "rot")
+
+    finanz = (sektor or "") == "Financial Services"
+    if jahre and not finanz:
+        b = jahre[-1]
+        if b["fcf"] is not None:
+            ni = b["nettogewinn"]
+            if b["fcf"] < 0:
+                add("Erzeugt das Unternehmen echten Cashflow?", "Nein, Free Cashflow negativ (verbrennt Geld)", "rot")
+                if b["cash"]:
+                    add("Wie lange reicht das Geld?", f"Cash reicht beim aktuellen Verbrauch ca. {b['cash'] / abs(b['fcf']):.1f} Jahre", "gelb")
+            else:
+                q = b["fcf"] / ni if ni and ni > 0 else None
+                add("Erzeugt das Unternehmen echten Cashflow?",
+                    "Ja, Free Cashflow positiv" + (f", {q * 100:.0f} % des Gewinns kommen als Cash an" if q else ""),
+                    "gruen" if q is None or q >= 0.8 else "gelb")
+        if b["capex_quote"] is not None:
+            c = b["capex_quote"] * 100
+            add("Muss es viel investieren, um zu wachsen?", f"Investitionen (CapEx) = {c:.1f} % vom Umsatz",
+                "gruen" if c < 5 else "gelb" if c < 15 else "rot")
+
+    ebitda = clean(info.get("ebitda"))
+    debt, cash = clean(info.get("totalDebt")), clean(info.get("totalCash"))
+    if finanz:
+        add("Wie hoch sind die Schulden?", "Bei Banken/Versicherungen nicht aussagekräftig (Schulden sind Teil des Geschäfts)", "gelb")
+    elif debt is not None and cash is not None:
+        net = debt - cash
+        if net <= 0:
+            add("Wie hoch sind die Schulden?", "Mehr Cash als Schulden (Nettocash)", "gruen")
+        elif ebitda and ebitda > 0:
+            x = net / ebitda
+            add("Wie hoch sind die Schulden?", f"Nettoschulden = {x:.1f}× EBITDA (in {x:.1f} Jahren tilgbar)",
+                "gruen" if x < 2 else "gelb" if x < 3.5 else "rot")
+        else:
+            add("Wie hoch sind die Schulden?", "Nettoschulden bei negativem operativem Ergebnis", "rot")
+
+    mc = clean(info.get("marketCap"))
+    fcf = jahre[-1]["fcf"] if jahre and not finanz else None
+    same_ccy = (info.get("financialCurrency") or info.get("currency")) == info.get("currency")
+    fpe = clean(info.get("forwardPE"))
+    teile = []
+    farbe = "gelb"
+    if mc and fcf is not None and same_ccy:
+        fy = fcf / mc * 100
+        teile.append(f"FCF-Rendite {fy:.1f} %")
+        farbe = "gruen" if fy >= 4 else "gelb" if fy >= 2 else "rot"
+    if fpe:
+        teile.append(f"KGV erwartet {fpe:.1f}")
+        if not teile[:-1]:
+            farbe = "gruen" if 0 < fpe <= 18 else "gelb" if 0 < fpe <= 35 else "rot"
+    if teile:
+        add("Welchen Preis zahle ich für das Wachstum?", ", ".join(teile), farbe)
+
+    ins = clean(info.get("heldPercentInsiders"))
+    if ins is not None:
+        add("Besitzt das Management selbst Aktien?",
+            f"Insider halten {ins * 100:.1f} %" + (" (bei Großkonzernen üblich niedrig)" if ins < 0.01 else ""),
+            "gruen" if ins >= 0.05 else "gelb")
+    return out
+
+
+def officers(info):
+    out = []
+    for o in (info.get("companyOfficers") or [])[:6]:
+        title = o.get("title") or ""
+        out.append({
+            "name": re.sub(r"\s+", " ", o.get("name") or "").strip(),
+            "titel": title,
+            "alter": o.get("age"),
+            "ceo": bool(re.search(r"\bCEO\b|Chief Executive|Vorstandsvorsitz", title, re.I)),
+        })
+    return out
 
 
 def fundamentals(t, info):
@@ -234,6 +432,50 @@ def fundamentals(t, info):
         pass
 
     out["ampel"] = ampel(out)
+    out["jahre"] = annual(t)
+    out["pruefung"] = pruefung(out["jahre"], info, out["sektor"])
+    out["management"] = officers(info)
+    out["mitarbeiter"] = clean(info.get("fullTimeEmployees"))
+    out["website"] = info.get("website")
+    out["schulden"] = clean(info.get("totalDebt"))
+    out["cash"] = clean(info.get("totalCash"))
+    out["ebitda"] = clean(info.get("ebitda"))
+    out["insider_anteil"] = clean(info.get("heldPercentInsiders"))
+    out["institutionen_anteil"] = clean(info.get("heldPercentInstitutions"))
+    out["bilanzwaehrung"] = info.get("financialCurrency")
+    return out
+
+
+def overheat_level(p, typ, rules):
+    """0 = normal, 1 = heiß, 2 = sehr heiß (stark über der 200-Tage-Linie bzw. RSI hoch)."""
+    cfg = rules.get("ueberhitzung") or {}
+    grenzen = (cfg.get(typ) or {}).get("abstand_sma200", [30, 50])
+    a = p.get("abstand_sma200")
+    lvl = 0
+    if a is not None:
+        lvl = 2 if a >= grenzen[1] else 1 if a >= grenzen[0] else 0
+    if lvl == 0 and p.get("rsi") is not None and p["rsi"] >= cfg.get("rsi_ueber", 75):
+        lvl = 1
+    return lvl
+
+
+def congress_trades(sym):
+    """Aktiengeschäfte von US-Kongressmitgliedern (STOCK Act) über die freie Bargo-API."""
+    try:
+        r = requests.get(f"{CONGRESS_API}/trades/{sym}", params={"limit": 20}, timeout=20)
+        r.raise_for_status()
+        time.sleep(0.3)
+    except Exception:
+        return None
+    out = []
+    for x in r.json().get("trades", []):
+        out.append({
+            "person": x.get("member"), "kammer": x.get("chamber"), "staat": x.get("state"),
+            "art": "kauf" if x.get("type") == "purchase" else "verkauf" if str(x.get("type", "")).startswith("sale") else x.get("type"),
+            "betrag": x.get("amount_range"), "betrag_min": x.get("amount_low"),
+            "datum": x.get("transaction_date"), "gemeldet": x.get("disclosure_date"),
+            "symbol": sym,
+        })
     return out
 
 
@@ -297,7 +539,7 @@ def insider_trades(t):
     return out
 
 
-def process_ticker(entry, rules, state, alerts):
+def process_ticker(entry, rules, state, alerts, profiles, politik):
     sym = entry["symbol"]
     t = yf.Ticker(sym)
     hist = t.history(period="max", auto_adjust=False)
@@ -315,6 +557,11 @@ def process_ticker(entry, rules, state, alerts):
     ins = [] if is_etf else insider_trades(t)
     since = (datetime.now() - timedelta(days=90)).strftime("%Y-%m-%d")
     ins_kaeufe_90 = [x for x in ins if x["art"] == "kauf" and x["datum"] >= since]
+    us_aktie = not is_etf and "." not in sym
+    pol = congress_trades(sym) if us_aktie else None
+    pol_90 = [x for x in (pol or []) if (x.get("gemeldet") or "") >= since]
+    politik.extend(pol_90)
+    heiss = overheat_level(p, entry.get("typ"), rules)
 
     grund = rules["grundbetrag"].get(entry.get("typ"), 0)
     faktor = stufen[p["stufe"] - 1]["faktor"] if p["stufe"] else 0
@@ -331,8 +578,15 @@ def process_ticker(entry, rules, state, alerts):
         "naechste_zahlen": (f or {}).get("naechste_zahlen"),
         "kursziel": (f or {}).get("kursziel"),
         "insider_kaeufe_90t": len(ins_kaeufe_90),
+        "politiker_90t": len(pol_90),
+        "heiss": heiss,
+        "pruefung_gruen": sum(1 for x in (f or {}).get("pruefung", []) if x["farbe"] == "gruen"),
+        "pruefung_rot": sum(1 for x in (f or {}).get("pruefung", []) if x["farbe"] == "rot"),
+        "pruefung_anzahl": len((f or {}).get("pruefung", [])),
+        "ceo": next((o["name"] for o in (f or {}).get("management", []) if o["ceo"]), None),
     }
-    detail = {"item": item, "historie": history_series(hist), "fundamentaldaten": f, "insider": ins}
+    detail = {"item": item, "historie": history_series(hist), "fundamentaldaten": f, "insider": ins,
+              "politiker": pol, "profil": profiles.get(sym)}
     save_json(OUT / "werte" / f"{safe_name(sym)}.json", detail)
 
     # --- Alarm-Logik mit Hysterese
@@ -350,6 +604,30 @@ def process_ticker(entry, rules, state, alerts):
         tiers[sym] = neu
     elif neu < alt and p["rueckgang_ath"] < stufen[alt - 1]["ab_prozent"] - HYSTERESE:
         tiers[sym] = neu
+
+    # --- Überhitzung (Hinweis zum Prüfen von Gewinnmitnahmen)
+    hot = state.setdefault("heiss", {})
+    alt_h = hot.get(sym, 0)
+    if heiss > alt_h:
+        txt = "sehr heiß gelaufen 🔥🔥" if heiss == 2 else "heiß gelaufen 🔥"
+        alerts.append(
+            f"🔥 <b>{entry['name']}</b> ({sym}) ist {txt}\n"
+            f"{fmt_pct(p['abstand_sma200'])} über der 200-Tage-Linie, RSI {p['rsi'] or 0:.0f}, "
+            f"{p['rueckgang_ath']:.1f} % unter ATH.\n"
+            f"Guter Zeitpunkt, die eigene These und Positionsgröße zu prüfen."
+        )
+        hot[sym] = heiss
+    elif heiss < alt_h and heiss == 0:
+        hot[sym] = 0
+
+    seen_p = state.setdefault("politiker_gemeldet", {})
+    for x in pol_90:
+        key = f"{sym}|{x['person']}|{x['datum']}|{x['art']}|{x['betrag']}"
+        if key not in seen_p:
+            seen_p[key] = x["gemeldet"]
+            if state.get("initialisiert") and state.get("politiker_init"):
+                alerts.append(f"🏛 {x['person']} ({x['kammer']}) meldet {'Kauf' if x['art'] == 'kauf' else 'Verkauf'} "
+                              f"<b>{entry['name']}</b> über {x['betrag']} am {x['datum']}")
 
     seen = state.setdefault("insider_gemeldet", {})
     for x in ins_kaeufe_90:
@@ -462,16 +740,17 @@ def main():
     rules = load_json(CONFIG / "rules.json")
     investors = (load_json(CONFIG / "investors.json", {}) or {}).get("investoren", [])
     state = load_json(STATE_FILE, {}) or {}
-    alerts, fehler, items = [], [], []
+    profiles = load_profiles()
+    alerts, fehler, items, politik = [], [], [], []
 
     for e in watch:
         try:
-            items.append(process_ticker(e, rules, state, alerts))
+            items.append(process_ticker(e, rules, state, alerts, profiles, politik))
             print("ok   ", e["symbol"])
         except Exception as ex:
-            fehler.append({"symbol": e["symbol"], "fehler": str(ex)})
-            print("FEHLER", e["symbol"], ex)
-            traceback.print_exc(limit=1)
+            fehler.append({"symbol": e["symbol"], "fehler": scrub(ex)})
+            print("FEHLER", e["symbol"], scrub(ex))
+    state["politiker_init"] = True
 
     inv_out = []
     for inv in investors:
@@ -479,12 +758,17 @@ def main():
             inv_out.append(investor_holdings(inv, state, alerts))
             print("ok    13F", inv["name"])
         except Exception as ex:
-            fehler.append({"symbol": f"13F {inv['name']}", "fehler": str(ex)})
-            print("FEHLER 13F", inv["name"], ex)
+            fehler.append({"symbol": f"13F {inv['name']}", "fehler": scrub(ex)})
+            print("FEHLER 13F", inv["name"], scrub(ex))
 
     now = datetime.now(timezone.utc).isoformat(timespec="minutes")
-    save_json(OUT / "overview.json", {"aktualisiert": now, "regeln": rules, "werte": items, "fehler": fehler})
-    save_json(OUT / "investoren.json", {"aktualisiert": now, "investoren": inv_out})
+    namen = {e["symbol"]: e["name"] for e in watch}
+    for x in politik:
+        x["name"] = namen.get(x["symbol"], x["symbol"])
+    politik.sort(key=lambda x: (x.get("gemeldet") or "", x.get("datum") or ""), reverse=True)
+    save_json(OUT / "overview.json", {"aktualisiert": now, "regeln": rules, "werte": items, "fehler": fehler,
+                                      "repo": os.environ.get("GITHUB_REPOSITORY") or "JanSchnell/AktienTracker"})
+    save_json(OUT / "investoren.json", {"aktualisiert": now, "investoren": inv_out, "politiker": politik})
 
     if alerts and state.get("initialisiert"):
         for a in alerts:
