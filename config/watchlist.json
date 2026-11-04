@@ -44,6 +44,8 @@
 
     { "symbol": "V",         "name": "Visa",                            "typ": "aktie", "kategorie": "Zahlungen & Fintech" },
     { "symbol": "MA",        "name": "Mastercard",                      "typ": "aktie", "kategorie": "Zahlungen & Fintech" },
+    { "symbol": "AXP"       , "name": "American Express"                , "typ": "aktie", "kategorie": "Zahlungen & Fintech" },
+    { "symbol": "ADYEN.AS"  , "name": "Adyen"                           , "typ": "aktie", "kategorie": "Zahlungen & Fintech" },
 
     { "symbol": "LLY",       "name": "Eli Lilly",                       "typ": "aktie", "kategorie": "Gesundheit & Pharma" },
     { "symbol": "NOVO-B.CO", "name": "Novo Nordisk",                    "typ": "aktie", "kategorie": "Gesundheit & Pharma" },
@@ -53,9 +55,14 @@
     { "symbol": "MC.PA",     "name": "LVMH",                            "typ": "aktie", "kategorie": "Konsum & Luxus" },
     { "symbol": "KO",        "name": "Coca-Cola",                       "typ": "aktie", "kategorie": "Konsum & Luxus" },
     { "symbol": "COST",      "name": "Costco",                          "typ": "aktie", "kategorie": "Konsum & Luxus" },
+    { "symbol": "WMT"       , "name": "Walmart"                         , "typ": "aktie", "kategorie": "Konsum & Luxus" },
+    { "symbol": "PG"        , "name": "Procter & Gamble"                , "typ": "aktie", "kategorie": "Konsum & Luxus" },
 
     { "symbol": "TSLA",      "name": "Tesla",                           "typ": "aktie", "kategorie": "Auto & Mobilität" },
     { "symbol": "UBER",      "name": "Uber",                            "typ": "aktie", "kategorie": "Auto & Mobilität" },
+    { "symbol": "7203.T"    , "name": "Toyota"                          , "typ": "aktie", "kategorie": "Auto & Mobilität" },
+    { "symbol": "BMW.DE"    , "name": "BMW"                             , "typ": "aktie", "kategorie": "Auto & Mobilität" },
+    { "symbol": "RACE"      , "name": "Ferrari"                         , "typ": "aktie", "kategorie": "Auto & Mobilität" },
 
     { "symbol": "SIE.DE",    "name": "Siemens",                         "typ": "aktie", "kategorie": "Industrie & Automatisierung" },
     { "symbol": "SU.PA",     "name": "Schneider Electric",              "typ": "aktie", "kategorie": "Industrie & Automatisierung" },
@@ -71,14 +78,25 @@
     { "symbol": "SPCX",      "name": "SpaceX",                          "typ": "aktie", "kategorie": "Luft-, Raumfahrt & Rüstung" },
     { "symbol": "RHM.DE",    "name": "Rheinmetall",                     "typ": "aktie", "kategorie": "Luft-, Raumfahrt & Rüstung" },
     { "symbol": "AIR.PA",    "name": "Airbus",                          "typ": "aktie", "kategorie": "Luft-, Raumfahrt & Rüstung" },
+    { "symbol": "GE"        , "name": "GE Aerospace"                    , "typ": "aktie", "kategorie": "Luft-, Raumfahrt & Rüstung" },
+    { "symbol": "RTX"       , "name": "RTX"                             , "typ": "aktie", "kategorie": "Luft-, Raumfahrt & Rüstung" },
+    { "symbol": "LMT"       , "name": "Lockheed Martin"                 , "typ": "aktie", "kategorie": "Luft-, Raumfahrt & Rüstung" },
+    { "symbol": "SAF.PA"    , "name": "Safran"                          , "typ": "aktie", "kategorie": "Luft-, Raumfahrt & Rüstung" },
+    { "symbol": "BA.L"      , "name": "BAE Systems"                     , "typ": "aktie", "kategorie": "Luft-, Raumfahrt & Rüstung" },
 
     { "symbol": "LIN",       "name": "Linde",                           "typ": "aktie", "kategorie": "Rohstoffe & Chemie" },
     { "symbol": "FCX",       "name": "Freeport-McMoRan",                "typ": "aktie", "kategorie": "Rohstoffe & Chemie" },
+    { "symbol": "AI.PA"     , "name": "Air Liquide"                     , "typ": "aktie", "kategorie": "Rohstoffe & Chemie" },
+    { "symbol": "RIO.L"     , "name": "Rio Tinto"                       , "typ": "aktie", "kategorie": "Rohstoffe & Chemie" },
 
     { "symbol": "NFLX",      "name": "Netflix",                         "typ": "aktie", "kategorie": "Telekom & Medien" },
     { "symbol": "DTE.DE",    "name": "Deutsche Telekom",                "typ": "aktie", "kategorie": "Telekom & Medien" },
+    { "symbol": "TMUS"      , "name": "T-Mobile US"                     , "typ": "aktie", "kategorie": "Telekom & Medien" },
+    { "symbol": "DIS"       , "name": "Walt Disney"                     , "typ": "aktie", "kategorie": "Telekom & Medien" },
 
     { "symbol": "PLD",       "name": "Prologis",                        "typ": "aktie", "kategorie": "Immobilien & Logistik" },
-    { "symbol": "UNP",       "name": "Union Pacific",                   "typ": "aktie", "kategorie": "Immobilien & Logistik" }
+    { "symbol": "UNP",       "name": "Union Pacific",                   "typ": "aktie", "kategorie": "Immobilien & Logistik" },
+    { "symbol": "AMT"       , "name": "American Tower"                  , "typ": "aktie", "kategorie": "Immobilien & Logistik" },
+    { "symbol": "DHL.DE"    , "name": "DHL Group"                       , "typ": "aktie", "kategorie": "Immobilien & Logistik" }
   ]
 }

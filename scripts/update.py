@@ -5,6 +5,7 @@ Umgebungsvariablen (optional):
   TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID  -> Benachrichtigungen per Telegram
   SEC_USER_AGENT                        -> Kontaktangabe für SEC-Abfragen, z. B. "AktienTracker max@example.com"
 """
+import html
 import json
 import math
 import os
@@ -691,6 +692,7 @@ def process_ticker(entry, rules, state, alerts, profiles, politik):
     sym = entry["symbol"]
     # Neu aufgenommene Werte: Ausgangszustand speichern, aber keine Meldungen auslösen
     bekannt = state.setdefault("bekannt", [])
+    tg_name = html.escape(entry["name"])
     alerts_start = len(alerts)
     t = yf.Ticker(sym)
     hist = t.history(period="max", auto_adjust=False)
@@ -751,10 +753,10 @@ def process_ticker(entry, rules, state, alerts, profiles, politik):
     if neu > alt:
         s = stufen[neu - 1]
         alerts.append(
-            f"📉 <b>{entry['name']}</b> ({sym}) hat <b>{s['name']}</b> erreicht\n"
+            f"📉 <b>{tg_name}</b> ({sym}) hat <b>{s['name']}</b> erreicht\n"
             f"Rückgang vom Allzeithoch: <b>{p['rueckgang_ath']:.1f} %</b> "
             f"(ATH {p['ath']:.2f} am {p['ath_datum']}, jetzt {p['kurs']:.2f} {item['waehrung'] or ''})\n"
-            f"Regel: Faktor {s['faktor']}× → {grund * s['faktor']:.0f} {rules.get('waehrung_grundbetrag', 'EUR')}"
+            f"Deinen Betrag für diese Stufe siehst du in der App."
         )
         tiers[sym] = neu
     elif neu < alt and p["rueckgang_ath"] < stufen[alt - 1]["ab_prozent"] - HYSTERESE:
@@ -766,7 +768,7 @@ def process_ticker(entry, rules, state, alerts, profiles, politik):
     if heiss > alt_h:
         txt = "sehr heiß gelaufen 🔥🔥" if heiss == 2 else "heiß gelaufen 🔥"
         alerts.append(
-            f"🔥 <b>{entry['name']}</b> ({sym}) ist {txt}\n"
+            f"🔥 <b>{tg_name}</b> ({sym}) ist {txt}\n"
             f"{fmt_pct(p['abstand_sma200'])} über der 200-Tage-Linie, RSI {p['rsi'] or 0:.0f}, "
             f"{p['rueckgang_ath']:.1f} % unter ATH.\n"
             f"Guter Zeitpunkt, die eigene These und Positionsgröße zu prüfen."
@@ -782,7 +784,7 @@ def process_ticker(entry, rules, state, alerts, profiles, politik):
             seen_p[key] = x["gemeldet"]
             if state.get("initialisiert") and state.get("politiker_init"):
                 alerts.append(f"🏛 {x['person']} ({x['kammer']}) meldet {'Kauf' if x['art'] == 'kauf' else 'Verkauf'} "
-                              f"<b>{entry['name']}</b> über {x['betrag']} am {x['datum']}")
+                              f"<b>{tg_name}</b> über {x['betrag']} am {x['datum']}")
 
     seen = state.setdefault("insider_gemeldet", {})
     for x in ins_kaeufe_90:
@@ -791,12 +793,79 @@ def process_ticker(entry, rules, state, alerts, profiles, politik):
             seen[key] = x["datum"]
             if state.get("initialisiert"):
                 wert = f" für {x['wert'] / 1e6:.2f} Mio. $" if x["wert"] else ""
-                alerts.append(f"🟢 Insider-Kauf bei <b>{entry['name']}</b>: {x['person']} ({x['position']}) "
+                alerts.append(f"🟢 Insider-Kauf bei <b>{tg_name}</b>: {x['person']} ({x['position']}) "
                               f"kauft {x['aktien']:,.0f} Aktien{wert} am {x['datum']}")
     if sym not in bekannt:
         del alerts[alerts_start:]
         bekannt.append(sym)
     return item
+
+
+def wechselkurse(items, entdecken):
+    """Kurs in Euro je Währungseinheit, für den Größenvergleich zwischen Aktien."""
+    out = {"EUR": 1.0}
+    for c in sorted({x.get("waehrung") for x in [*items, *entdecken] if x.get("waehrung")} - {"EUR"}):
+        basis, faktor = ("GBP", 0.01) if c in ("GBp", "GBX") else (c, 1)
+        try:
+            kurs = yf.Ticker(f"{basis}EUR=X").history(period="5d")["Close"].dropna()
+            out[c] = float(kurs.iloc[-1]) * faktor
+        except Exception as ex:
+            print("FEHLER Wechselkurs", c, scrub(ex))
+    return out
+
+
+# ---------------------------------------------------------------- Wochenbericht
+
+def woche_key(now):
+    """Montag der Berichtswoche: Sonntag und der Montag danach ergeben denselben Schlüssel."""
+    tag = now.date() + timedelta(days=1)
+    return (tag - timedelta(days=tag.weekday())).isoformat()
+
+
+def wochenbericht(items, entdecken, state, now):
+    """Telegram-Zusammenfassung. Liefert (text, neuer Stand für den nächsten Vergleich)."""
+    zeilen = [f"🗓 <b>Wochenrückblick</b> {now.strftime('%d.%m.%Y')}"]
+    name = lambda w: html.escape(w["name"])
+
+    bew = sorted((w for w in items if w.get("perf_1w") is not None), key=lambda w: w["perf_1w"], reverse=True)
+    if bew:
+        zeilen += ["", "<b>Stärkste Kursbewegungen (1 Woche)</b>"]
+        zeilen += [f"📈 {name(w)} {fmt_pct(w["perf_1w"]).replace(".", ",")}" for w in bew[:3] if w["perf_1w"] > 0]
+        zeilen += [f"📉 {name(w)} {fmt_pct(w["perf_1w"]).replace(".", ",")}" for w in bew[::-1][:3] if w["perf_1w"] < 0]
+
+    heute, bis = now.strftime("%Y-%m-%d"), (now + timedelta(days=8)).strftime("%Y-%m-%d")
+    zahlen = sorted((w for w in items if heute <= (w.get("naechste_zahlen") or "")[:10] <= bis), key=lambda w: w["naechste_zahlen"])
+    if zahlen:
+        zeilen += ["", "<b>Quartalszahlen in den nächsten Tagen</b>"]
+        zeilen += [f"• {w['naechste_zahlen'][8:10]}.{w['naechste_zahlen'][5:7]}. {name(w)}" for w in zahlen[:12]]
+        if len(zahlen) > 12:
+            zeilen.append(f"… und {len(zahlen) - 12} weitere")
+
+    stufen_alt = state.get("woche_stufen")
+    stufen_neu = {w["symbol"]: w.get("stufe") or 0 for w in items}
+    if stufen_alt:
+        neu_in_stufe = [w for w in items if (w.get("stufe") or 0) > stufen_alt.get(w["symbol"], w.get("stufe") or 0)]
+        if neu_in_stufe:
+            zeilen += ["", "<b>Neu in einer höheren Kaufstufe</b>"]
+            zeilen += [f"• {name(w)}: {w['rueckgang_ath']:.0f} % unter Allzeithoch" for w in neu_in_stufe[:8]]
+    heiss = [w for w in items if w.get("heiss")]
+    if heiss:
+        zeilen += ["", f"🔥 <b>Heiß gelaufen:</b> {', '.join(name(w) for w in heiss[:6])}"]
+
+    schon = state.get("woche_ideen", [])
+    ideen = [x for x in entdecken if not x.get("in_watchlist") and (x.get("score") or 0) >= 70 and x["symbol"] not in schon][:3]
+    if ideen:
+        zeilen += ["", "<b>Neue Ideen für deine Recherche</b>"]
+        for x in ideen:
+            grund = html.escape((x.get("plus") or [x.get("kurz") or ""])[0])
+            zeilen.append(f"💡 <b>{html.escape(x['name'])}</b> ({html.escape(x['kategorie'])}, Score {x['score']}): {grund}")
+
+    repo = os.environ.get("GITHUB_REPOSITORY") or "JanSchnell/AktienTracker"
+    owner, name_repo = repo.split("/")
+    zeilen += ["", "Automatisch aus festen Regeln erstellt, keine Kaufempfehlung.", f"https://{owner.lower()}.github.io/{name_repo}/"]
+    # Ideen rotieren: bereits genannte erst wieder nach längerer Zeit
+    stand = {"woche_stufen": stufen_neu, "woche_ideen": (schon + [x["symbol"] for x in ideen])[-30:]}
+    return "\n".join(zeilen)[:4000], stand
 
 
 # ---------------------------------------------------------------- 13F-Filings großer Investoren
@@ -926,7 +995,7 @@ def main():
     for x in politik:
         x["name"] = namen.get(x["symbol"], x["symbol"])
     politik.sort(key=lambda x: (x.get("gemeldet") or "", x.get("datum") or ""), reverse=True)
-    save_json(OUT / "overview.json", {"aktualisiert": now, "regeln": rules, "werte": items, "fehler": fehler,
+    save_json(OUT / "overview.json", {"aktualisiert": now, "regeln": rules, "werte": items, "fehler": fehler, "fx": wechselkurse(items, entdecken),
                                       "repo": os.environ.get("GITHUB_REPOSITORY") or "JanSchnell/AktienTracker"})
     save_json(OUT / "investoren.json", {"aktualisiert": now, "investoren": inv_out, "politiker": politik})
     save_json(OUT / "entdecken.json", {"aktualisiert": now, "werte": entdecken})
@@ -936,6 +1005,14 @@ def main():
             telegram(a)
     elif alerts:
         print(f"Erster Lauf: {len(alerts)} Meldungen nicht gesendet (nur Ausgangszustand gespeichert).")
+    jetzt = datetime.now(timezone.utc)
+    erzwungen = os.environ.get("WOCHENBERICHT") == "true"
+    if erzwungen or (state.get("initialisiert") and jetzt.weekday() in (6, 0) and state.get("woche_gesendet") != woche_key(jetzt)):
+        text, stand = wochenbericht(items, entdecken, state, jetzt)
+        telegram(text)
+        # Ein manueller Test ändert nichts am regulären Bericht
+        if not erzwungen:
+            state.update(stand, woche_gesendet=woche_key(jetzt))
     state["initialisiert"] = True
     save_json(STATE_FILE, state)
     print(f"Fertig: {len(items)} Werte, {len(inv_out)} Investoren, {len(fehler)} Fehler, {len(alerts)} Meldungen.")

@@ -22,10 +22,20 @@
       <nav class="tabs" id="tabs">
         <a href="#/" data-tab="uebersicht">Übersicht</a>
         <a href="#/entdecken" data-tab="entdecken">Entdecken</a>
-        <a href="#/investoren" data-tab="investoren">Investoren</a>
-        <a href="#/lexikon" data-tab="lexikon">Lexikon</a>
-        <a href="#/regeln" data-tab="regeln">Regeln</a>
+        <div class="mehr">
+          <button type="button" id="mehrBtn" aria-haspopup="true" aria-expanded="false">Mehr ▾</button>
+          <div class="mehr-menu" id="mehrMenu" hidden>
+            <a href="#/vergleich" data-tab="vergleich">Aktien vergleichen</a>
+            <a href="#/investoren" data-tab="investoren">Große Investoren</a>
+            <a href="#/lexikon" data-tab="lexikon">Lexikon</a>
+            <a href="#/regeln" data-tab="regeln">Kaufregeln & Beträge</a>
+          </div>
+        </div>
+        <button type="button" id="suchBtn" aria-label="Unternehmen suchen" title="Unternehmen suchen">🔍</button>
       </nav>
+    </div>
+    <div class="such-panel" id="suchPanel" hidden>
+      <div class="wrap"><input type="search" id="suchFeld" placeholder="Unternehmen, Ticker oder Branche suchen …" aria-label="Suche"><div class="such-liste" id="suchListe"></div></div>
     </div>
   </header>
 
@@ -39,6 +49,7 @@
   </footer>
 
   <script src="lexikon.js"></script>
+  <script src="werkzeuge.js"></script>
   <script src="app.js"></script>
 </body>
 </html>

@@ -9,7 +9,7 @@ const LEXIKON = [
       faust: "Unter 2 Mrd. = klein, 2–10 Mrd. = mittel, ab 200 Mrd. = Riese. Kleine Firmen schwanken meist stärker." },
     { id: "kgv", name: "KGV (Kurs-Gewinn-Verhältnis)", kurz: "Wie viele Jahresgewinne du für die Aktie bezahlst. Kurs ÷ Gewinn je Aktie.",
       text: "Ein KGV von 20 heißt: Bei gleichbleibendem Gewinn dauert es 20 Jahre, bis der Gewinn dem Kaufpreis entspricht. Die Zahl basiert auf den vergangenen 12 Monaten. Fehlt der Wert, macht das Unternehmen meist Verlust.",
-      faust: "Der breite Markt liegt langfristig grob bei 15–20. Schnell wachsende Firmen sind oft teurer, stagnierende Firmen günstiger. Am besten mit der eigenen Branche vergleichen." },
+      faust: "Unter 15 niedrig, 15–25 üblich, 25–40 hoch, über 40 sehr hoch. Bei 60 muss der Gewinn über Jahre stark wachsen, sonst droht ein Kursrückgang, selbst wenn das Unternehmen gut ist. Am besten mit der eigenen Branche vergleichen. Auf jeder Unternehmensseite steht dazu eine Einschätzung." },
     { id: "kgv_erw", name: "KGV erwartet (Forward-KGV)", kurz: "KGV auf Basis des Gewinns, den Analysten für das nächste Jahr schätzen.",
       text: "Liegt das erwartete KGV unter dem normalen KGV, rechnen Analysten mit steigendem Gewinn. Liegt es darüber, erwarten sie einen Rückgang. Es bleibt eine Schätzung, die sich als falsch erweisen kann.",
       faust: "Bis etwa 18 eher günstig, 18–35 üblich für gute Firmen, darüber müssen die hohen Erwartungen auch eintreten." },

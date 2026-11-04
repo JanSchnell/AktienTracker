@@ -7,7 +7,13 @@ on:
     - cron: "30 11 * * 1-5"   # Mittag Europa
     - cron: "0 15 * * 1-5"    # kurz nach US-Eröffnung
     - cron: "30 21 * * 1-5"   # nach US-Börsenschluss
+    - cron: "0 16 * * 0"      # Sonntag: Telegram-Wochenbericht
   workflow_dispatch:           # manuell starten über den Actions-Tab
+    inputs:
+      wochenbericht:
+        description: "Wochenbericht jetzt testweise per Telegram senden"
+        type: boolean
+        default: false
   push:
     branches: [main]
     paths: ["config/**", "docs/**", "scripts/**"]
@@ -63,6 +69,7 @@ jobs:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
           SEC_USER_AGENT: ${{ secrets.SEC_USER_AGENT }}
+          WOCHENBERICHT: ${{ inputs.wochenbericht }}
         run: python scripts/update.py
 
       - name: Watchlist und Alarm-Zustand speichern

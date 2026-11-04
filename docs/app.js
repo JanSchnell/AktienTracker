@@ -40,10 +40,19 @@ async function getJSON(url) {
   return r.json();
 }
 
+// Beträge je Stufe: eigene Eingabe auf diesem Gerät, sonst Vorgabe aus config/rules.json
+function betraege() {
+  const r = OV.regeln, eigene = store.get("betraege", {}) || {};
+  const liste = (typ) => r.stufen.map((s, i) => { const v = (eigene[typ] || [])[i]; return v != null ? v : r.grundbetrag[typ] * s.faktor; });
+  return { etf: liste("etf"), aktie: liste("aktie") };
+}
+const betragFuer = (w) => (w.stufe ? betraege()[w.typ === "etf" ? "etf" : "aktie"][w.stufe - 1] : 0);
+function applyBetraege() { OV.werte.forEach((w) => { w.zusatzkauf = betragFuer(w); }); }
+
 function tierBadge(w) {
   if (!w.stufe) return `<span class="tier tier-0">–</span>`;
   const s = OV.regeln.stufen[w.stufe - 1];
-  return `<span class="tier tier-${w.stufe}" title="ab −${s.ab_prozent} % · Faktor ${s.faktor}×">${esc(s.name)}</span>`;
+  return `<span class="tier tier-${w.stufe}" title="ab −${s.ab_prozent} % unter Allzeithoch">${esc(s.name)}</span>`;
 }
 
 function destroyCharts() { charts.forEach((c) => c.destroy()); charts = []; }
@@ -142,7 +151,7 @@ const COLS = [
   { key: "tag_pct", label: "Heute", get: (w) => w.tag_pct },
   { key: "rueckgang_ath", label: "vom ATH", get: (w) => w.rueckgang_ath },
   { key: "stufe", label: "Stufe", get: (w) => w.stufe },
-  { key: "zusatzkauf", label: "Regel-Betrag", get: (w) => w.zusatzkauf, hide: true },
+  { key: "zusatzkauf", label: "Mein Betrag", get: (w) => w.zusatzkauf, hide: true },
   { key: "abstand_sma200", label: "vs. 200-Tage", get: (w) => w.abstand_sma200, hide: true },
   { key: "perf_1j", label: "1 Jahr", get: (w) => w.perf_1j, hide: true },
   { key: "kgv_erwartet", label: "KGV erw.", get: (w) => w.kgv_erwartet, hide: true },
@@ -177,7 +186,7 @@ function renderOverview() {
       ${statTile("insider", "Insider-Käufe (90 Tage)", zahl("insider"), namen("insider"))}
     </div>
 
-    <div class="toolbar">
+    <div class="toolbar kats">
       ${kats.map((k) => `<button class="chip ${k === state.kat ? "on" : ""}" data-kat="${esc(k)}">${esc(k)}</button>`).join("")}
     </div>
     <div class="toolbar">
@@ -198,7 +207,7 @@ function renderOverview() {
     ${state.fokus ? `<div class="filterbar"><span>Filter: <strong>${FOKUS[state.fokus].label}</strong></span><button class="chip" id="fokusAus">Filter aufheben ✕</button></div>` : ""}
     <div class="tbl-wrap" id="tblBox"><table id="tbl"><thead></thead><tbody></tbody></table></div>
     <p class="muted small">Rückgang und Stufe beziehen sich auf den höchsten Schlusskurs der gesamten Historie in Handelswährung.
-      „Regel-Betrag“ = Grundbetrag × Faktor der Stufe laut <a href="#/regeln">deinen Regeln</a>.
+      „Mein Betrag“ = dein Betrag für diese Stufe, einstellbar unter <a href="#/regeln">Kaufregeln</a>.
       Klick auf eine Zeile öffnet die Analyse, ✕ entfernt den Wert.
       ${weg ? `<button class="linkbtn" id="showAll">${weg} ausgeblendet, wieder einblenden</button>` : ""}</p>
     ${ideenTeaser()}`;
@@ -304,6 +313,7 @@ async function renderDetail(sym) {
   try { d = await getJSON("data/werte/" + safe(sym) + ".json"); }
   catch { $app.innerHTML = `<a class="back" href="#/">← Übersicht</a><p>Keine Daten für ${esc(sym)}.</p>`; return; }
   const w = d.item, f = d.fundamentaldaten, cur = w.waehrung || "";
+  w.zusatzkauf = betragFuer(w);
 
   const sections = [
     f && ["kennzahlen", "Kennzahlen", "Bewertung & Kennzahlen", valuationSection(w, f, cur)],
@@ -328,6 +338,7 @@ async function renderDetail(sym) {
         <div class="${cls(w.tag_pct)}">${fmtPct(w.tag_pct, 2)} heute · Stand ${date(w.datum)}</div>
       </div>
     </div>
+    <div class="head-aktionen small"><a href="#/vergleich/${encodeURIComponent(w.symbol)}/">Vergleichen</a></div>
     ${glance(w, f, d.profil)}
     ${w.heiss ? `<div class="note hotnote">${heatBadge(w)} <strong>${esc(w.name)} liegt ${fmtPct(w.abstand_sma200, 0)} über der ${term("sma200", "200-Tage-Linie")}</strong> (${term("rsi", "RSI")} ${fmt(w.rsi, 0)}).
       Kein Verkaufssignal, aber ein guter Moment, die eigene These und die Positionsgröße zu prüfen. Mehr dazu unter <a href="#/regeln">Regeln</a>.</div>` : ""}
@@ -374,16 +385,22 @@ function glance(w, f, p) {
     </div>` : ""}</div>`;
 }
 
-function valuationSection(w, f, cur) {
-  const zTage = daysUntil(f.naechste_zahlen);
+function fcfRendite(f, cur) {
   const letzte = (f.jahre || []).slice(-1)[0];
   const gleich = !f.bilanzwaehrung || f.bilanzwaehrung === cur;
-  const fcfR = letzte && letzte.fcf != null && f.marktkap && gleich && f.sektor !== "Financial Services" ? letzte.fcf / f.marktkap * 100 : null;
+  return letzte && letzte.fcf != null && f.marktkap && gleich && f.sektor !== "Financial Services" ? letzte.fcf / f.marktkap * 100 : null;
+}
+
+function valuationSection(w, f, cur) {
+  const zTage = daysUntil(f.naechste_zahlen);
+  const fcfR = fcfRendite(f, cur);
+  const hinweis = (v) => { const u = kgvUrteil(v); return u ? ` <span class="small muted">${u[1]}</span>` : ""; };
   return `
+    ${kgvBox(f)}
     <div class="grid kv">
       ${kv(term("marktkap", "Börsenwert"), big(f.marktkap) + " " + esc(cur))}
-      ${kv(term("kgv", "KGV"), fmt(f.kgv, 1))}
-      ${kv(term("kgv_erw", "KGV erwartet"), fmt(f.kgv_erwartet, 1))}
+      ${kv(term("kgv", "KGV"), fmt(f.kgv, 1) + hinweis(f.kgv))}
+      ${kv(term("kgv_erw", "KGV erwartet"), fmt(f.kgv_erwartet, 1) + hinweis(f.kgv_erwartet))}
       ${kv(term("peg", "PEG"), fmt(f.peg, 2))}
       ${kv(term("kuv", "KUV"), fmt(f.kuv, 1))}
       ${kv(term("fcf_rendite", "Free-Cashflow-Rendite"), fcfR == null ? "–" : fmt(fcfR, 1) + " %", cls(fcfR))}
@@ -761,17 +778,18 @@ function drawQuarters(q, cur) {
 
 // Grober Abgleich Watchlist <-> Emittentenname im 13F (dort stehen keine Ticker)
 const ALIAS = { TSM: "TAIWAN SEMICONDUCTOR", GOOGL: "ALPHABET", META: "META PLATFORMS", V: "VISA INC", JPM: "JPMORGAN", NEE: "NEXTERA", AVGO: "BROADCOM", CRM: "SALESFORCE", NOW: "SERVICENOW", "ASML.AS": "ASML", "NOVO-B.CO": "NOVO-NORDISK",
-  GEV: "GE VERNOVA", LRCX: "LAM RESEARCH", SPCX: "SPACE EXPLORATION", MA: "MASTERCARD", "6861.T": "KEYENCE", "000660.KS": "SK HYNIX" };
+  GEV: "GE VERNOVA", LRCX: "LAM RESEARCH", SPCX: "SPACE EXPLORATION", MA: "MASTERCARD", "6861.T": "KEYENCE", "000660.KS": "SK HYNIX",
+  LLY: "ELI LILLY", JNJ: "JOHNSON & JOHNSON", KO: "COCA COLA CO ", UNP: "UNION PAC", GE: "GE AEROSPACE", RTX: "RTX", LMT: "LOCKHEED", AXP: "AMERICAN EXPRESS", TMUS: "T-MOBILE", DIS: "DISNEY", PG: "PROCTER", WMT: "WALMART", AMT: "AMERICAN TOWER" };
 function issuerKey(w) { return (ALIAS[w.symbol] || w.name.split(" ")[0]).toUpperCase(); }
 function matchWatch(name) {
   const n = (name || "").toUpperCase();
-  return OV.werte.find((w) => w.typ !== "etf" && n.startsWith(issuerKey(w)));
+  return OV.werte.find((w) => w.typ !== "etf" && (n + " ").startsWith(issuerKey(w)));
 }
 function holdersOf(w) {
   if (!INV || w.typ === "etf") return [];
   const key = issuerKey(w), out = [];
   INV.investoren.forEach((inv) => inv.positionen.forEach((p) => {
-    if ((p.name || "").toUpperCase().startsWith(key) && (p.wert > 0 || p.aenderung === "verkauft")) out.push({ inv, p });
+    if (((p.name || "").toUpperCase() + " ").startsWith(key) && (p.wert > 0 || p.aenderung === "verkauft")) out.push({ inv, p });
   }));
   return out.sort((a, b) => b.p.wert - a.p.wert);
 }
@@ -963,15 +981,28 @@ function renderLexikon(ziel) {
 
 function renderRules() {
   const r = OV.regeln, cur = r.waehrung_grundbetrag || "EUR";
+  const b = betraege();
   $app.innerHTML = `<div class="prose">
     <h1>Deine Kaufregeln</h1>
-    <p>Die Regeln stehen in <code>config/rules.json</code> und gelten für alle Werte. Ändern kannst du sie direkt auf GitHub (Datei öffnen → Stift-Symbol).
-      Beim nächsten Lauf werden sie übernommen.</p>
-    <div class="tbl-wrap"><table>
-      <thead><tr><th>Stufe</th><th>Rückgang vom ATH</th><th>Faktor</th><th>Betrag ETF</th><th>Betrag Aktie</th></tr></thead>
-      <tbody>${r.stufen.map((s, i) => `<tr style="cursor:default"><td><span class="tier tier-${i + 1}">${esc(s.name)}</span></td>
-        <td>ab −${s.ab_prozent} %</td><td>${s.faktor}×</td><td>${fmt(r.grundbetrag.etf * s.faktor, 0)} ${cur}</td><td>${fmt(r.grundbetrag.aktie * s.faktor, 0)} ${cur}</td></tr>`).join("")}</tbody>
+    <p>Lege fest, wie viel du in jeder Stufe zusätzlich investieren möchtest. Die Beträge werden sofort überall in der App übernommen und nur auf diesem Gerät gespeichert.</p>
+    <div class="tbl-wrap"><table class="plain betrag-tab">
+      <thead><tr><th>Stufe</th><th>Rückgang vom Allzeithoch</th><th>Betrag ETF (${cur})</th><th>Betrag Aktie (${cur})</th></tr></thead>
+      <tbody>${r.stufen.map((s, i) => `<tr><td><span class="tier tier-${i + 1}">${esc(s.name)}</span></td>
+        <td>ab −${s.ab_prozent} %</td>
+        <td><input class="betrag" inputmode="decimal" data-typ="etf" data-i="${i}" value="${b.etf[i]}" aria-label="${esc(s.name)} Betrag ETF"></td>
+        <td><input class="betrag" inputmode="decimal" data-typ="aktie" data-i="${i}" value="${b.aktie[i]}" aria-label="${esc(s.name)} Betrag Aktie"></td></tr>`).join("")}</tbody>
     </table></div>
+    <p class="small" id="betragSumme"></p>
+    <details class="card"><summary>Alle Stufen schnell aus einem Grundbetrag berechnen</summary>
+      <p class="small">Trage den Betrag für Stufe 1 ein. Die höheren Stufen werden damit vervielfacht (${r.stufen.map((s) => s.faktor + "×").join(", ")}).</p>
+      <div class="form">
+        <label>Grundbetrag ETF<input id="grundEtf" inputmode="decimal" value="${b.etf[0]}"></label>
+        <label>Grundbetrag Aktie<input id="grundAktie" inputmode="decimal" value="${b.aktie[0]}"></label>
+        <button class="chip on" id="grundGo">Stufen berechnen</button>
+        <button class="chip" id="grundReset">Auf Vorgabe zurücksetzen</button>
+      </div>
+    </details>
+    <p class="muted small">Die Prozent-Grenzen der Stufen stehen in <code>config/rules.json</code> und lassen sich dort auf GitHub ändern. Sie steuern auch die Telegram-Alarme. Das Tool kauft nichts, die Beträge sind nur deine eigene Merkhilfe.</p>
 
     <h2>Was die Forschung zu „Buy the Dip“ sagt</h2>
     <ul>
@@ -1015,24 +1046,59 @@ function renderRules() {
     </ul>
 
     <div class="note small">Dieses Tool zeigt Daten und wendet deine selbst gewählten Regeln an. Es ist keine Anlageberatung und kauft oder verkauft nichts.
-      Die Beträge sind Beispielwerte, entscheide selbst, was zu deiner Situation passt.</div>
+      Die Beträge legst du selbst fest, entscheide, was zu deiner Situation passt.</div>
   </div>`;
+  const summe = () => {
+    const betroffen = sichtbar().filter((w) => w.stufe > 0);
+    document.getElementById("betragSumme").innerHTML = `Aktuell stehen <strong>${betroffen.length} Werte</strong> in einer Stufe. Würdest du überall deinen Betrag einsetzen, wären das <strong>${fmt(betroffen.reduce((a, w) => a + betragFuer(w), 0), 0)} ${cur}</strong>. Das soll zeigen, wie weit dein freies Geld reicht. Es ist kein Vorschlag, alles zu kaufen.`;
+  };
+  $app.querySelectorAll(".betrag").forEach((f) => f.addEventListener("input", () => {
+    const akt = betraege();
+    const v = zahl(f.value);
+    if (v == null || v < 0) return;
+    akt[f.dataset.typ][+f.dataset.i] = v;
+    store.set("betraege", akt);
+    applyBetraege();
+    summe();
+  }));
+  document.getElementById("grundGo").addEventListener("click", () => {
+    const e = zahl(document.getElementById("grundEtf").value), a = zahl(document.getElementById("grundAktie").value);
+    if (e == null || a == null) return;
+    store.set("betraege", { etf: r.stufen.map((s) => e * s.faktor), aktie: r.stufen.map((s) => a * s.faktor) });
+    applyBetraege();
+    renderRules();
+  });
+  document.getElementById("grundReset").addEventListener("click", () => { store.set("betraege", {}); applyBetraege(); renderRules(); });
+  summe();
 }
 
 // ------------------------------------------------------------ Router
 
+let warUebersicht = false, ovScroll = 0;
+const GRUPPE_MEHR = ["vergleich", "investoren", "lexikon", "regeln"];
+
 function route() {
   destroyCharts(); priceChart = null; hideTerm();
   const h = location.hash || "#/";
-  const tab = ["investoren", "regeln", "entdecken", "lexikon"].find((t) => h.startsWith("#/" + t)) || "uebersicht";
+  // Position in der Übersicht merken, damit „zurück“ nicht wieder oben landet
+  if (warUebersicht) ovScroll = scrollY;
+  const zurueck = h.startsWith("#/wert/") ? false : ovScroll;
+  const tab = ["investoren", "regeln", "entdecken", "lexikon", "vergleich"].find((t) => h.startsWith("#/" + t)) || "uebersicht";
   document.querySelectorAll("#tabs a").forEach((a) => a.classList.toggle("active", a.dataset.tab === tab));
+  document.getElementById("mehrBtn").classList.toggle("active", GRUPPE_MEHR.includes(tab));
+  document.getElementById("mehrMenu").hidden = true;
+  const teile = h.split("/").map(decodeURIComponent);
+  warUebersicht = false;
   window.scrollTo(0, 0);
   if (h.startsWith("#/wert/")) return renderDetail(decodeURIComponent(h.slice(7)));
   if (tab === "investoren") return renderInvestors();
   if (tab === "regeln") return renderRules();
   if (tab === "entdecken") return renderEntdecken();
-  if (tab === "lexikon") return renderLexikon(h.split("/")[2]);
+  if (tab === "lexikon") return renderLexikon(teile[2]);
+  if (tab === "vergleich") return renderVergleich(teile[2], teile[3]);
   renderOverview();
+  warUebersicht = true;
+  if (zurueck) window.scrollTo(0, zurueck);
 }
 
 async function init() {
@@ -1044,6 +1110,8 @@ async function init() {
   }
   try { INV = await getJSON("data/investoren.json"); } catch { INV = null; }
   try { ENT = await getJSON("data/entdecken.json"); } catch { ENT = null; }
+  applyBetraege();
+  setupNav();
   document.getElementById("stand").textContent = "Stand: " + new Date(OV.aktualisiert).toLocaleString("de-DE", { dateStyle: "medium", timeStyle: "short" }) +
     (OV.fehler && OV.fehler.length ? ` · ${OV.fehler.length} Werte nicht geladen: ${OV.fehler.map((f) => f.symbol).join(", ")}` : "");
   addEventListener("hashchange", route);
