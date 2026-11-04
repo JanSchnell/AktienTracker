@@ -17,9 +17,5 @@
     "aktie": { "abstand_sma200": [30, 50] },
     "etf":   { "abstand_sma200": [15, 25] },
     "rsi_ueber": 75
-  },
-  "telegram": {
-    "bei_neuer_stufe": true,
-    "taegliche_zusammenfassung": false
   }
 }

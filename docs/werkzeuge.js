@@ -1,6 +1,6 @@
 "use strict";
 
-// Aktienvergleich, KGV-Einschätzung sowie Menü und Suche.
+// Preisalarme, Aktienvergleich, KGV-Einschätzung sowie Menü und Suche.
 
 const SEKTOR_DE = {
   "Technology": "Technologie", "Financial Services": "Finanzen", "Healthcare": "Gesundheit", "Consumer Cyclical": "Konsum (zyklisch)",
@@ -8,6 +8,103 @@ const SEKTOR_DE = {
   "Communication Services": "Medien & Telekom", "Utilities": "Versorger", "Real Estate": "Immobilien",
 };
 const zahl = (v) => { const n = parseFloat(String(v ?? "").replace(/\s/g, "").replace(",", ".")); return isNaN(n) ? null : n; };
+
+// ------------------------------------------------------------ Preisalarme
+
+const alleAlarme = () => (OV.alarme || []);
+const aktiveAlarme = (sym) => alleAlarme().filter((a) => a.symbol === sym && !a.ausgeloest);
+const ALARM_ARTEN = [
+  ["kurs_unter", "Kurs fällt auf …", "Kurs"],
+  ["fall_heute", "Kurs fällt um … % ab heute", "Prozent"],
+  ["rueckgang_ath", "Kurs liegt … % unter Allzeithoch", "Prozent"],
+  ["kurs_ueber", "Kurs steigt auf …", "Kurs"],
+];
+function alarmBeschreibung(a, cur) {
+  if (a.art === "kurs_unter") return `Kurs fällt auf ${fmt(a.wert)} ${cur}`;
+  if (a.art === "kurs_ueber") return `Kurs steigt auf ${fmt(a.wert)} ${cur}`;
+  return `Kurs ${fmt(a.wert, 0)} % unter Allzeithoch`;
+}
+
+function alarmDialog(w) {
+  const cur = w.waehrung || "";
+  const dlg = document.createElement("dialog");
+  dlg.className = "dlg";
+  dlg.innerHTML = `<h3>Preisalarm für ${esc(w.name)}</h3>
+    <p class="small muted" style="margin:0 0 10px">Aktuell ${fmt(w.kurs)} ${esc(cur)}, ${fmt(w.rueckgang_ath, 0)} % unter dem Allzeithoch.</p>
+    <div class="form alarm-form">
+      <label>Wann möchtest du benachrichtigt werden?<select id="aArt">${ALARM_ARTEN.map(([k, l]) => `<option value="${k}">${l}</option>`).join("")}</select></label>
+      <label><span id="aWertLabel">Kurs in ${esc(cur)}</span><input id="aWert" inputmode="decimal" autocomplete="off"></label>
+      <label>Notiz für dich (optional)<input id="aNotiz" maxlength="200" placeholder="z. B. Hier würde ich nachkaufen wollen"></label>
+    </div>
+    <p class="small" id="aInfo" style="margin:8px 0 0"></p>
+    <p class="muted small" style="margin:8px 0 0">Es öffnet sich GitHub, dort nur noch auf „Create“ tippen. Nach ca. 5 Minuten ist der Alarm aktiv. Dein GitHub-Projekt ist öffentlich, also sind Alarm und Notiz dort einsehbar.</p>
+    <div class="dlg-actions"><button class="chip on" id="aGo">Weiter zu GitHub →</button><button class="chip" id="aZu">Abbrechen</button></div>`;
+  document.body.appendChild(dlg);
+  const el = (id) => dlg.querySelector("#" + id);
+  const zu = () => { dlg.close(); dlg.remove(); };
+  // Liefert den zu speichernden Alarm oder eine Fehlermeldung
+  const pruefe = () => {
+    const art = el("aArt").value, v = zahl(el("aWert").value);
+    if (!(v > 0)) return { fehler: "" };
+    if (art === "kurs_unter" && v >= w.kurs) return { fehler: `Der Kurs liegt schon bei ${fmt(w.kurs)} ${cur}. Trage einen niedrigeren Wert ein.` };
+    if (art === "kurs_ueber" && v <= w.kurs) return { fehler: `Der Kurs liegt schon bei ${fmt(w.kurs)} ${cur}. Trage einen höheren Wert ein.` };
+    if (art !== "kurs_unter" && art !== "kurs_ueber" && v >= 100) return { fehler: "Bitte einen Wert unter 100 % eintragen." };
+    if (art === "rueckgang_ath" && v <= w.rueckgang_ath) return { fehler: `Der Kurs liegt schon ${fmt(w.rueckgang_ath, 0)} % unter dem Hoch. Trage einen höheren Wert ein.` };
+    if (art === "fall_heute") {
+      const ziel = Math.round(w.kurs * (1 - v / 100) * 100) / 100;
+      return { art: "kurs_unter", wert: ziel, info: `Das entspricht einem Kurs von ${fmt(ziel)} ${cur}.` };
+    }
+    if (art === "rueckgang_ath") return { art, wert: v, info: `Das entspricht heute einem Kurs von etwa ${fmt(w.ath * (1 - v / 100))} ${cur}. Steigt das Hoch, steigt auch diese Grenze.` };
+    return { art, wert: v, info: `Das sind ${fmtPct((v / w.kurs - 1) * 100)} gegenüber heute.` };
+  };
+  const zeige = () => { const r = pruefe(); el("aInfo").textContent = r.fehler ?? r.info; el("aInfo").className = "small" + (r.fehler ? " neg" : ""); };
+  el("aArt").addEventListener("change", () => {
+    const eintrag = ALARM_ARTEN.find(([k]) => k === el("aArt").value);
+    el("aWertLabel").textContent = eintrag[2] === "Prozent" ? "Prozent" : `Kurs in ${cur}`;
+    zeige();
+  });
+  el("aWert").addEventListener("input", zeige);
+  el("aZu").addEventListener("click", zu);
+  el("aGo").addEventListener("click", () => {
+    const r = pruefe();
+    if (r.fehler !== undefined) { el("aInfo").textContent = r.fehler || "Bitte einen Wert eintragen."; el("aInfo").className = "small neg"; el("aWert").focus(); return; }
+    const notiz = el("aNotiz").value.replace(/\s+/g, " ").trim();
+    window.open(issueUrl(`Alarm: ${w.name} (${alarmBeschreibung(r, cur)})`, ["aktion: alarm_neu", `symbol: ${w.symbol}`, `art: ${r.art}`, `wert: ${r.wert}`, `notiz: ${notiz}`]), "_blank", "noopener");
+    zu();
+  });
+  dlg.showModal();
+  el("aWert").focus();
+}
+
+function renderAlarme() {
+  const info = (a) => OV.werte.find((w) => w.symbol === a.symbol);
+  const aktiv = alleAlarme().filter((a) => !a.ausgeloest && info(a));
+  const fertig = alleAlarme().filter((a) => a.ausgeloest && info(a)).slice().reverse();
+  const loeschen = (a) => `<a class="x-btn" title="Alarm löschen" aria-label="Alarm löschen" target="_blank" rel="noopener" href="${issueUrl(`Alarm: löschen ${a.symbol}`, ["aktion: alarm_loeschen", `id: ${a.id}`])}">✕</a>`;
+  const abstand = (a, w) => {
+    if (a.art === "rueckgang_ath") return `aktuell ${fmt(w.rueckgang_ath, 0)} %`;
+    return `noch ${fmtPct((a.wert / w.kurs - 1) * 100)}`;
+  };
+  const optionen = [...OV.werte].sort((x, y) => x.name.localeCompare(y.name, "de")).map((w) => `<option value="${esc(w.symbol)}">${esc(w.name)}</option>`).join("");
+  $app.innerHTML = `<div class="prose">
+    <h1>Preisalarme</h1>
+    <p class="muted">Lege selbst fest, wann du sofort per Telegram eine Nachricht bekommst. Jeder Alarm meldet sich nur einmal. Alles andere kommt gesammelt im Wochenbericht am Sonntag.</p>
+    <div class="form" style="margin-bottom:12px"><label>Neuer Alarm für<select id="neuWert"><option value="">Wert auswählen …</option>${optionen}</select></label></div>
+    ${aktiv.length ? `<div class="tbl-wrap"><table class="plain alarm-tab"><thead><tr><th>Wert</th><th>Alarm</th><th>Abstand</th><th class="x-col"></th></tr></thead><tbody>
+      ${aktiv.map((a) => { const w = info(a); return `<tr><td><a href="#/wert/${encodeURIComponent(a.symbol)}">${esc(w.name)}</a>${a.notiz ? `<div class="sym">${esc(a.notiz)}</div>` : ""}</td>
+        <td>${esc(alarmBeschreibung(a, w.waehrung || ""))}</td><td>${abstand(a, w)}</td><td class="x-col">${loeschen(a)}</td></tr>`; }).join("")}
+    </tbody></table></div>` : `<div class="card muted small">Noch keine aktiven Alarme.</div>`}
+    ${fertig.length ? `<h2>Bereits ausgelöst</h2><div class="tbl-wrap"><table class="plain alarm-tab"><thead><tr><th>Wert</th><th>Alarm</th><th>Ausgelöst</th><th class="x-col"></th></tr></thead><tbody>
+      ${fertig.map((a) => { const w = info(a); return `<tr><td><a href="#/wert/${encodeURIComponent(a.symbol)}">${esc(w.name)}</a></td><td>${esc(alarmBeschreibung(a, w.waehrung || ""))}</td><td>${date(a.ausgeloest)}</td><td class="x-col">${loeschen(a)}</td></tr>`; }).join("")}
+    </tbody></table></div>` : ""}
+    <p class="muted small">Geprüft wird bei jedem automatischen Lauf, also viermal an Handelstagen. Die Nachricht kann daher einige Stunden später kommen als die Kursbewegung. Es zählen auch das Tagestief und Tageshoch. Löschen öffnet GitHub, dort auf „Create“ tippen. Das Tool kauft und verkauft nichts.</p>
+  </div>`;
+  document.getElementById("neuWert").addEventListener("change", (ev) => {
+    const w = OV.werte.find((x) => x.symbol === ev.target.value);
+    if (w) alarmDialog(w);
+    ev.target.value = "";
+  });
+}
 
 // ------------------------------------------------------------ Aktienvergleich
 
@@ -42,7 +139,7 @@ function zeichneVergleich(a, b, range) {
   const basisA = gemeinsam[0][1], basisB = pb.get(gemeinsam[0][0]);
   chartDefaults();
   const serie = (d, data, farbe) => ({ label: d.item.name, data, borderColor: farbe, backgroundColor: farbe, borderWidth: 2, pointRadius: 0, tension: 0.1 });
-  const kurz = ["1W", "1M", "3M", "6M", "YTD"].includes(range);
+  const kurz = ["1W", "1M", "6M"].includes(range);
   vergleichChart = new Chart(document.getElementById("cVergleich"), {
     type: "line",
     data: { labels: gemeinsam.map((p) => p[0]), datasets: [
@@ -96,8 +193,7 @@ async function renderVergleich(symA, symB) {
     <div class="tbl-wrap" style="margin-top:12px"><table class="plain"><thead><tr><th>Kennzahl</th><th><a href="#/wert/${encodeURIComponent(symA)}">${esc(a.item.name)}</a></th><th><a href="#/wert/${encodeURIComponent(symB)}">${esc(b.item.name)}</a></th></tr></thead>
       <tbody>${zeilen}</tbody></table></div>
     <p class="muted small">Fett = in dieser Zeile rechnerisch der günstigere oder stärkere Wert. Das ist kein Gesamturteil, und Firmen aus verschiedenen Branchen sind nur bedingt vergleichbar.</p>`;
-  const start = store.get("range", "1J");
-  zeichneVergleich(a, b, start);
+  zeichneVergleich(a, b, gueltigerRange(store.get("range", "1J")));
   $app.querySelectorAll("[data-vr]").forEach((x) => x.addEventListener("click", () => zeichneVergleich(a, b, x.dataset.vr)));
 }
 

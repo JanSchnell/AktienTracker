@@ -181,8 +181,6 @@ ul.clean { margin: 6px 0 0; padding-left: 18px; }
   .inv-grid { grid-template-columns: 1fr; }
   .tabs { gap: 2px; }
   .tabs a, .tabs button { padding: 6px 7px; font-size: .84rem; }
-  .toolbar.kats { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; padding-bottom: 2px; }
-  .toolbar.kats .chip { white-space: nowrap; flex: none; }
   .brand span { display: none; }
   .hide-m { display: none; }
   .price { font-size: 1.6rem; }
@@ -315,3 +313,35 @@ td.vorn { font-weight: 700; }
   #tbl td:first-child { white-space: normal; min-width: 130px; }
   th, td { padding: 8px 7px; }
 }
+
+/* Preisalarme */
+.alarm-form { flex-direction: column; align-items: stretch; }
+.alarm-form label { flex: none; }
+.alarm-form select, .alarm-form input { width: 100%; }
+a.x-btn { display: inline-block; text-decoration: none; }
+.alarm-tab td { white-space: normal; }
+.alarm-tab td:first-child { min-width: 90px; }
+
+/* Branchenfilter */
+.toolbar.filter select { flex: 0 1 280px; min-width: 0; padding: 7px 10px; font-weight: 600; cursor: pointer; }
+.toolbar.filter select.aktiv { border-color: var(--accent); color: var(--accent); }
+
+@media (max-width: 760px) {
+  .ranges { flex-wrap: nowrap; gap: 4px; }
+  .range, .ranges > .chip { flex: 1 1 0; min-width: 0; padding-left: 2px; padding-right: 2px; text-align: center; }
+  .range small { font-size: .66rem; white-space: nowrap; }
+}
+@media (max-width: 760px) { .toolbar.filter select { flex: 1 1 100%; } }
+@media (max-width: 420px) { .brand img { display: none; } .top-inner { gap: 0; justify-content: flex-end; } .tabs a, .tabs button { padding: 6px 6px; } }
+
+/* Unternehmen verstehen: am Computer drei Spalten, auf dem Handy Reiter */
+.firma-tabs { display: none; }
+@media (max-width: 760px) {
+  .drei { grid-template-columns: 1fr; }
+  .firma-tabs { display: flex; gap: 6px; margin-bottom: 10px; }
+  .firma-tabs .chip { flex: 1 1 0; min-width: 0; padding-left: 4px; padding-right: 4px; text-align: center; }
+  .firma-gruppe { display: none; }
+  .firma-gruppe.aktiv { display: block; }
+  .firma-gruppe .gruppe { display: none; }
+}
+

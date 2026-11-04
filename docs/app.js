@@ -186,11 +186,11 @@ function renderOverview() {
       ${statTile("insider", "Insider-Käufe (90 Tage)", zahl("insider"), namen("insider"))}
     </div>
 
-    <div class="toolbar kats">
-      ${kats.map((k) => `<button class="chip ${k === state.kat ? "on" : ""}" data-kat="${esc(k)}">${esc(k)}</button>`).join("")}
-    </div>
-    <div class="toolbar">
-      <input type="search" id="q" placeholder="Suchen: Name, Ticker oder Branche …" value="${esc(state.q)}">
+    <div class="toolbar filter">
+      <select id="katWahl" class="${state.kat !== "Alle" ? "aktiv" : ""}" aria-label="Nach Branche filtern">
+        ${kats.map((k) => `<option value="${esc(k)}" ${k === state.kat ? "selected" : ""}>${k === "Alle" ? "Alle Branchen" : esc(k)} (${k === "Alle" ? werte.length : werte.filter((w) => w.kategorie === k).length})</option>`).join("")}
+      </select>
+      <input type="search" id="q" placeholder="Suchen: Name, Ticker …" value="${esc(state.q)}">
       <button class="chip add" id="addBtn">＋ Wert hinzufügen</button>
     </div>
     <div class="card" id="addForm" hidden style="margin-bottom:12px">
@@ -212,8 +212,7 @@ function renderOverview() {
       ${weg ? `<button class="linkbtn" id="showAll">${weg} ausgeblendet, wieder einblenden</button>` : ""}</p>
     ${ideenTeaser()}`;
 
-  $app.querySelectorAll("[data-kat]").forEach((b) =>
-    b.addEventListener("click", () => { state.kat = b.dataset.kat; store.set("kat", state.kat); renderOverview(); }));
+  document.getElementById("katWahl").addEventListener("change", (ev) => { state.kat = ev.target.value; store.set("kat", state.kat); renderOverview(); });
   $app.querySelectorAll("[data-fokus]").forEach((b) => b.addEventListener("click", () => {
     state.fokus = state.fokus === b.dataset.fokus ? null : b.dataset.fokus;
     state.kat = "Alle";
@@ -258,7 +257,8 @@ function renderRows() {
     const z = daysUntil(w.naechste_zahlen);
     return `<tr data-s="${esc(w.symbol)}">
       <td><div class="name">${esc(w.name)} ${heatBadge(w)} ${w.insider_kaeufe_90t ? `<span class="badge buy" title="Insider-Käufe in den letzten 90 Tagen">Insider</span>` : ""}
-          ${w.politiker_90t ? `<span class="badge" title="Politiker-Trades in den letzten 90 Tagen gemeldet">🏛 ${w.politiker_90t}</span>` : ""}</div>
+          ${w.politiker_90t ? `<span class="badge" title="Politiker-Trades in den letzten 90 Tagen gemeldet">🏛 ${w.politiker_90t}</span>` : ""}
+          ${aktiveAlarme(w.symbol).length ? `<span title="Preisalarm aktiv" aria-label="Preisalarm aktiv">🔔</span>` : ""}</div>
           <div class="sym">${esc(w.symbol)} · ${esc(w.kategorie)}</div></td>
       <td>${fmt(w.kurs)} <span class="sym">${esc(w.waehrung || "")}</span></td>
       <td class="${cls(w.tag_pct)}">${fmtPct(w.tag_pct, 2)}</td>
@@ -338,7 +338,7 @@ async function renderDetail(sym) {
         <div class="${cls(w.tag_pct)}">${fmtPct(w.tag_pct, 2)} heute · Stand ${date(w.datum)}</div>
       </div>
     </div>
-    <div class="head-aktionen small"><a href="#/vergleich/${encodeURIComponent(w.symbol)}/">Vergleichen</a></div>
+    <div class="head-aktionen small"><a href="#/vergleich/${encodeURIComponent(w.symbol)}/">Vergleichen</a> · <button class="linkbtn" id="alarmBtn">Preisalarm setzen</button>${aktiveAlarme(w.symbol).length ? ` · <a href="#/alarme">🔔 ${aktiveAlarme(w.symbol).length} aktiv</a>` : ""}</div>
     ${glance(w, f, d.profil)}
     ${w.heiss ? `<div class="note hotnote">${heatBadge(w)} <strong>${esc(w.name)} liegt ${fmtPct(w.abstand_sma200, 0)} über der ${term("sma200", "200-Tage-Linie")}</strong> (${term("rsi", "RSI")} ${fmt(w.rsi, 0)}).
       Kein Verkaufssignal, aber ein guter Moment, die eigene These und die Positionsgröße zu prüfen. Mehr dazu unter <a href="#/regeln">Regeln</a>.</div>` : ""}
@@ -349,10 +349,14 @@ async function renderDetail(sym) {
     document.getElementById(b.dataset.goto).scrollIntoView({ behavior: "smooth" })));
   const desc = document.getElementById("desc");
   if (desc) document.getElementById("more").addEventListener("click", (e) => { desc.classList.toggle("open"); e.target.textContent = desc.classList.contains("open") ? "Weniger" : "Mehr anzeigen"; });
+  document.getElementById("alarmBtn").addEventListener("click", () => alarmDialog(w));
+  $app.querySelectorAll("[data-firma]").forEach((b) => b.addEventListener("click", () => {
+    $app.querySelectorAll("[data-firma]").forEach((x) => { x.classList.toggle("on", x === b); x.setAttribute("aria-selected", String(x === b)); });
+    $app.querySelectorAll(".firma-gruppe").forEach((g) => g.classList.toggle("aktiv", g.dataset.gruppe === b.dataset.firma));
+  }));
   document.getElementById("rmDetail").addEventListener("click", () => removeDialog(w.symbol, w.name, () => { location.hash = "#/"; }));
 
-  const start = store.get("range", "1J");
-  drawPrice(d, RANGES.some(([r]) => r === start) ? start : "1J");
+  drawPrice(d, gueltigerRange(store.get("range", "1J")));
   $app.querySelectorAll("[data-r]").forEach((b) => b.addEventListener("click", () => {
     store.set("range", b.dataset.r);
     drawPrice(d, b.dataset.r);
@@ -490,11 +494,10 @@ function profileSection(p, w) {
     return `<div class="card muted small">Für diesen Wert gibt es noch kein ausführliches Profil.
       Bitte Claude, eins zu ergänzen (Datei <code>config/profiles/</code>). Die Kennzahlen werden trotzdem automatisch ausgewertet.</div>`;
   }
-  const gruppen = PROFIL_GRUPPEN.map(([titel, fragen]) => {
-    const qa = fragen.filter(([k]) => p[k]).map(([k, q]) => `<div class="qa"><div class="q">${q}</div><div class="a">${esc(p[k])}</div></div>`).join("");
-    return qa ? `<div class="card"><h3 class="gruppe">${titel}</h3><div class="qa-liste">${qa}</div></div>` : "";
-  }).join("");
-  return `<div class="grid drei">${gruppen}</div>
+  const gefuellt = PROFIL_GRUPPEN.map(([titel, fragen]) => [titel, fragen.filter(([k]) => p[k]).map(([k, q]) => `<div class="qa"><div class="q">${q}</div><div class="a">${esc(p[k])}</div></div>`).join("")]).filter(([, qa]) => qa);
+  const gruppen = gefuellt.map(([titel, qa], i) => `<div class="card firma-gruppe ${i === 0 ? "aktiv" : ""}" data-gruppe="${i}"><h3 class="gruppe">${titel}</h3><div class="qa-liste">${qa}</div></div>`).join("");
+  return `<div class="firma-tabs" role="tablist">${gefuellt.map(([titel], i) => `<button type="button" class="chip ${i === 0 ? "on" : ""}" role="tab" aria-selected="${i === 0}" data-firma="${i}">${titel}</button>`).join("")}</div>
+    <div class="grid drei">${gruppen}</div>
     <div class="grid two" style="margin-top:12px">
       <div class="card contra"><h3>Gegenargumente & Risiken</h3>
         <ul class="clean small">${(p.risiken || []).map((r) => `<li>${esc(r)}</li>`).join("")}</ul>
@@ -684,14 +687,15 @@ function chartDefaults() {
   Chart.defaults.font.family = getComputedStyle(document.body).fontFamily;
 }
 
-const RANGES = [["1W", 7], ["1M", 30], ["3M", 91], ["6M", 182], ["YTD", 0], ["1J", 365], ["3J", 1095], ["5J", 1825], ["Max", 1e6]];
+const RANGES = [["1W", 7], ["1M", 30], ["6M", 182], ["1J", 365], ["5J", 1825], ["Max", 1e6]];
+const gueltigerRange = (r) => (RANGES.some(([x]) => x === r) ? r : "1J");
 
 function rangePoints(hist, range) {
   if (!hist.length) return [];
   const days = RANGES.find(([r]) => r === range)[1];
   const last = new Date(hist[hist.length - 1][0]);
   // Letzter Kurs vor dem Zeitraum als Ausgangspunkt, damit z. B. 1W wirklich eine Woche umfasst
-  const cut = (range === "YTD" ? new Date(last.getFullYear(), 0, 1) : new Date(last.getTime() - days * 864e5)).toISOString().slice(0, 10);
+  const cut = new Date(last.getTime() - days * 864e5).toISOString().slice(0, 10);
   let i = hist.findIndex((p) => p[0] >= cut);
   if (i < 0) return [];
   if (i > 0 && hist[i][0] > cut) i -= 1;
@@ -707,7 +711,7 @@ function drawPrice(d, range) {
   if (priceChart) { priceChart.destroy(); charts = charts.filter((c) => c !== priceChart); }
   $app.querySelectorAll("[data-r]").forEach((b) => b.classList.toggle("on", b.dataset.r === range));
   const pts = rangePoints(d.historie, range);
-  const kurz = ["1W", "1M", "3M", "6M", "YTD"].includes(range);
+  const kurz = ["1W", "1M", "6M"].includes(range);
   const w = d.item;
   const line = (y, label, color) => ({ label, data: pts.map(() => y), borderColor: color, borderWidth: 1, borderDash: [5, 4], pointRadius: 0, fill: false });
   const accent = css("--accent");
@@ -1002,7 +1006,7 @@ function renderRules() {
         <button class="chip" id="grundReset">Auf Vorgabe zurücksetzen</button>
       </div>
     </details>
-    <p class="muted small">Die Prozent-Grenzen der Stufen stehen in <code>config/rules.json</code> und lassen sich dort auf GitHub ändern. Sie steuern auch die Telegram-Alarme. Das Tool kauft nichts, die Beträge sind nur deine eigene Merkhilfe.</p>
+    <p class="muted small">Die Prozent-Grenzen der Stufen stehen in <code>config/rules.json</code> und lassen sich dort auf GitHub ändern. Neu erreichte Stufen stehen im Telegram-Wochenbericht. Das Tool kauft nichts, die Beträge sind nur deine eigene Merkhilfe.</p>
 
     <h2>Was die Forschung zu „Buy the Dip“ sagt</h2>
     <ul>
@@ -1022,7 +1026,7 @@ function renderRules() {
     </ul>
     <h2>Wann verkaufen? Hinweise bei Überhitzung</h2>
     <p>Das Tool markiert Werte als <span class="badge hot">🔥 heiß</span> bzw. <span class="badge hot2">🔥🔥 sehr heiß</span>, wenn sie weit über ihrer 200-Tage-Linie liegen
-      oder der RSI sehr hoch ist. Dafür gibt es auch eine Telegram-Nachricht. Aktuelle Grenzen:</p>
+      oder der RSI sehr hoch ist. Diese Werte stehen auch im Telegram-Wochenbericht. Aktuelle Grenzen:</p>
     <div class="tbl-wrap"><table><thead><tr><th>Typ</th><th>🔥 heiß ab</th><th>🔥🔥 sehr heiß ab</th></tr></thead><tbody>
       ${["aktie", "etf"].map((t) => { const g = ((r.ueberhitzung || {})[t] || {}).abstand_sma200 || [30, 50];
         return `<tr style="cursor:default"><td>${t === "etf" ? "ETF" : "Aktie"}</td><td>+${g[0]} % über 200-Tage-Linie</td><td>+${g[1]} %</td></tr>`; }).join("")}
@@ -1075,7 +1079,7 @@ function renderRules() {
 // ------------------------------------------------------------ Router
 
 let warUebersicht = false, ovScroll = 0;
-const GRUPPE_MEHR = ["vergleich", "investoren", "lexikon", "regeln"];
+const GRUPPE_MEHR = ["alarme", "vergleich", "lexikon", "regeln"];
 
 function route() {
   destroyCharts(); priceChart = null; hideTerm();
@@ -1083,7 +1087,7 @@ function route() {
   // Position in der Übersicht merken, damit „zurück“ nicht wieder oben landet
   if (warUebersicht) ovScroll = scrollY;
   const zurueck = h.startsWith("#/wert/") ? false : ovScroll;
-  const tab = ["investoren", "regeln", "entdecken", "lexikon", "vergleich"].find((t) => h.startsWith("#/" + t)) || "uebersicht";
+  const tab = ["investoren", "regeln", "entdecken", "lexikon", "vergleich", "alarme"].find((t) => h.startsWith("#/" + t)) || "uebersicht";
   document.querySelectorAll("#tabs a").forEach((a) => a.classList.toggle("active", a.dataset.tab === tab));
   document.getElementById("mehrBtn").classList.toggle("active", GRUPPE_MEHR.includes(tab));
   document.getElementById("mehrMenu").hidden = true;
@@ -1096,6 +1100,7 @@ function route() {
   if (tab === "entdecken") return renderEntdecken();
   if (tab === "lexikon") return renderLexikon(teile[2]);
   if (tab === "vergleich") return renderVergleich(teile[2], teile[3]);
+  if (tab === "alarme") return renderAlarme();
   renderOverview();
   warUebersicht = true;
   if (zurueck) window.scrollTo(0, zurueck);

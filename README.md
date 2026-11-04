@@ -12,7 +12,7 @@ Dein persönlicher Analyst für die Watchlist. Mehrmals täglich werden automati
 - **Politiker-Trades** (US-Kongress, STOCK Act) über die freie Bargo-API
 - **Überhitzungs-Hinweise** 🔥, wenn ein Wert weit über der 200-Tage-Linie liegt (Anlass zum Prüfen, kein Verkaufssignal)
 - **Werte selbst hinzufügen/entfernen** über die Webseite (öffnet ein vorausgefülltes GitHub-Issue, das automatisch verarbeitet wird)
-- **Telegram-Nachricht**, wenn ein Wert eine neue Kaufstufe erreicht oder heiß läuft, ein Insider oder Politiker kauft oder ein neues 13F erscheint
+- **Telegram**: sofort nur bei selbst gesetzten Preisalarmen, alles andere (neue Kaufstufen, heiß gelaufene Werte, Insider, Politiker, 13F, Quartalszahlen, neue Ideen) gesammelt im Wochenbericht am Sonntag
 
 Das Tool **kauft und verkauft nichts** und ist keine Anlageberatung. Es zeigt Daten und wendet deine eigenen Regeln an.
 

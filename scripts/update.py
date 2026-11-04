@@ -33,10 +33,6 @@ TG_TOKEN = (os.environ.get("TELEGRAM_BOT_TOKEN") or "").strip()
 TG_CHAT = (os.environ.get("TELEGRAM_CHAT_ID") or "").strip()
 CONGRESS_API = "https://www.bargo.ai/free-apis/congress/v1"
 
-# Hysterese: eine Stufe gilt erst wieder als "verlassen", wenn der Rückgang
-# so viele Prozentpunkte unter ihre Schwelle fällt. Verhindert Alarm-Spam.
-HYSTERESE = 3.0
-
 
 def load_json(path, default=None):
     try:
@@ -126,9 +122,10 @@ def rsi(close, n=14):
 # ---------------------------------------------------------------- Telegram
 
 def telegram(text):
+    """Sendet eine Nachricht, liefert True nur bei Erfolg."""
     if not (TG_TOKEN and TG_CHAT):
         print("[telegram aus]", text.replace("\n", " | "))
-        return
+        return False
     try:
         r = requests.post(
             f"https://api.telegram.org/bot{TG_TOKEN}/sendMessage",
@@ -136,8 +133,10 @@ def telegram(text):
             timeout=20,
         )
         r.raise_for_status()
+        return True
     except Exception as e:
-        print("Telegram-Fehler:", e)
+        print("Telegram-Fehler:", scrub(e))
+        return False
 
 
 # ---------------------------------------------------------------- Kurse & Kennzahlen
@@ -180,6 +179,8 @@ def price_block(hist, stufen):
         "perf_5j": pct(last, back(5 * 365)),
         "perf_ytd": pct(last, float(ytd.iloc[-1])) if len(ytd) else None,
         "stufe": tier_for(drawdown, stufen),
+        "tag_tief": clean(hist["Low"].dropna().iloc[-1]) if "Low" in hist else None,
+        "tag_hoch": clean(hist["High"].dropna().iloc[-1]) if "High" in hist else None,
     }
 
 
@@ -688,12 +689,12 @@ def scan_universe(watch, rules, profiles, items):
     return sorted(out, key=lambda x: -(x["score"] or 0))
 
 
-def process_ticker(entry, rules, state, alerts, profiles, politik):
+def process_ticker(entry, rules, state, meldungen, profiles, politik):
     sym = entry["symbol"]
-    # Neu aufgenommene Werte: Ausgangszustand speichern, aber keine Meldungen auslösen
+    # Neu aufgenommene Werte: Ausgangszustand speichern, aber nichts für den Wochenbericht vormerken
     bekannt = state.setdefault("bekannt", [])
     tg_name = html.escape(entry["name"])
-    alerts_start = len(alerts)
+    meldungen_start = len(meldungen)
     t = yf.Ticker(sym)
     hist = t.history(period="max", auto_adjust=False)
     if hist is None or hist.empty:
@@ -746,45 +747,15 @@ def process_ticker(entry, rules, state, alerts, profiles, politik):
               "politiker": pol, "profil": profiles.get(sym)}
     save_json(OUT / "werte" / f"{safe_name(sym)}.json", detail)
 
-    # --- Alarm-Logik mit Hysterese
-    tiers = state.setdefault("stufen", {})
-    alt = tiers.get(sym, 0)
-    neu = p["stufe"]
-    if neu > alt:
-        s = stufen[neu - 1]
-        alerts.append(
-            f"📉 <b>{tg_name}</b> ({sym}) hat <b>{s['name']}</b> erreicht\n"
-            f"Rückgang vom Allzeithoch: <b>{p['rueckgang_ath']:.1f} %</b> "
-            f"(ATH {p['ath']:.2f} am {p['ath_datum']}, jetzt {p['kurs']:.2f} {item['waehrung'] or ''})\n"
-            f"Deinen Betrag für diese Stufe siehst du in der App."
-        )
-        tiers[sym] = neu
-    elif neu < alt and p["rueckgang_ath"] < stufen[alt - 1]["ab_prozent"] - HYSTERESE:
-        tiers[sym] = neu
-
-    # --- Überhitzung (Hinweis zum Prüfen von Gewinnmitnahmen)
-    hot = state.setdefault("heiss", {})
-    alt_h = hot.get(sym, 0)
-    if heiss > alt_h:
-        txt = "sehr heiß gelaufen 🔥🔥" if heiss == 2 else "heiß gelaufen 🔥"
-        alerts.append(
-            f"🔥 <b>{tg_name}</b> ({sym}) ist {txt}\n"
-            f"{fmt_pct(p['abstand_sma200'])} über der 200-Tage-Linie, RSI {p['rsi'] or 0:.0f}, "
-            f"{p['rueckgang_ath']:.1f} % unter ATH.\n"
-            f"Guter Zeitpunkt, die eigene These und Positionsgröße zu prüfen."
-        )
-        hot[sym] = heiss
-    elif heiss < alt_h and heiss == 0:
-        hot[sym] = 0
-
+    # Bewegungen landen gesammelt im Wochenbericht, sofort kommen nur eigene Preisalarme
     seen_p = state.setdefault("politiker_gemeldet", {})
     for x in pol_90:
         key = f"{sym}|{x['person']}|{x['datum']}|{x['art']}|{x['betrag']}"
         if key not in seen_p:
             seen_p[key] = x["gemeldet"]
             if state.get("initialisiert") and state.get("politiker_init"):
-                alerts.append(f"🏛 {x['person']} ({x['kammer']}) meldet {'Kauf' if x['art'] == 'kauf' else 'Verkauf'} "
-                              f"<b>{tg_name}</b> über {x['betrag']} am {x['datum']}")
+                art = "Kauf" if x["art"] == "kauf" else "Verkauf"
+                meldungen.append({"art": "politiker", "text": f"{tg_name}: {art} von {html.escape(str(x['person']))} ({html.escape(str(x['betrag']))})"})
 
     seen = state.setdefault("insider_gemeldet", {})
     for x in ins_kaeufe_90:
@@ -792,11 +763,10 @@ def process_ticker(entry, rules, state, alerts, profiles, politik):
         if key not in seen:
             seen[key] = x["datum"]
             if state.get("initialisiert"):
-                wert = f" für {x['wert'] / 1e6:.2f} Mio. $" if x["wert"] else ""
-                alerts.append(f"🟢 Insider-Kauf bei <b>{tg_name}</b>: {x['person']} ({x['position']}) "
-                              f"kauft {x['aktien']:,.0f} Aktien{wert} am {x['datum']}")
+                wert = f" für {de_zahl(x['wert'] / 1e6)} Mio. $" if x["wert"] else ""
+                meldungen.append({"art": "insider", "text": f"{tg_name}: {html.escape(x['person'])} ({html.escape(x['position'])}){wert}"})
     if sym not in bekannt:
-        del alerts[alerts_start:]
+        del meldungen[meldungen_start:]
         bekannt.append(sym)
     return item
 
@@ -812,6 +782,66 @@ def wechselkurse(items, entdecken):
         except Exception as ex:
             print("FEHLER Wechselkurs", c, scrub(ex))
     return out
+
+
+# ---------------------------------------------------------------- Eigene Preisalarme
+
+ALARM_DATEI = CONFIG / "alarme.json"
+
+
+def de_zahl(v, d=2):
+    return f"{v:,.{d}f}".replace(",", "§").replace(".", ",").replace("§", ".")
+
+
+def alarm_erreicht(a, w):
+    """Auch ein Tagestief oder -hoch zwischen zwei Läufen zählt, damit kurze Ausschläge nicht untergehen."""
+    if a["art"] == "kurs_unter":
+        return (w.get("tag_tief") or w["kurs"]) <= a["wert"]
+    if a["art"] == "kurs_ueber":
+        return (w.get("tag_hoch") or w["kurs"]) >= a["wert"]
+    return a["art"] == "rueckgang_ath" and w["rueckgang_ath"] >= a["wert"]
+
+
+def alarm_text(a, w):
+    cur = w.get("waehrung") or ""
+    grund = {
+        "kurs_unter": f"Der Kurs ist auf deine Grenze von {de_zahl(a['wert'])} {cur} gefallen.",
+        "kurs_ueber": f"Der Kurs ist auf deine Grenze von {de_zahl(a['wert'])} {cur} gestiegen.",
+        "rueckgang_ath": f"Der Kurs liegt mindestens {de_zahl(a['wert'], 0)} % unter dem Allzeithoch.",
+    }[a["art"]]
+    z = [f"🔔 <b>Preisalarm: {html.escape(w['name'])}</b>", grund, "",
+         f"Aktuell: <b>{de_zahl(w['kurs'])} {cur}</b> ({fmt_pct(w.get('tag_pct')).replace('.', ',')} heute)",
+         f"{de_zahl(w['rueckgang_ath'], 0)} % unter dem Allzeithoch"]
+    if (w.get("ampel") or {}).get("farbe"):
+        z.append("Letztes Quartal: " + {"gruen": "stark", "gelb": "gemischt", "rot": "schwach"}[w["ampel"]["farbe"]])
+    if (w.get("naechste_zahlen") or "") >= datetime.now().strftime("%Y-%m-%d"):
+        n = w["naechste_zahlen"]
+        z.append(f"Nächste Quartalszahlen: {n[8:10]}.{n[5:7]}.{n[:4]}")
+    if a.get("notiz"):
+        z += ["", f"Deine Notiz: {html.escape(a['notiz'])}"]
+    repo = os.environ.get("GITHUB_REPOSITORY") or "JanSchnell/AktienTracker"
+    owner, name_repo = repo.split("/")
+    z += ["", "Prüfe vor einer Entscheidung, warum sich der Kurs so bewegt hat.",
+          f"https://{owner.lower()}.github.io/{name_repo}/#/wert/{w['symbol']}"]
+    return "\n".join(z)
+
+
+def alarme_pruefen(items, now):
+    """Löst jeden Alarm einmal aus. Scheitert das Senden, bleibt er aktiv und wird beim nächsten Lauf wiederholt."""
+    daten = load_json(ALARM_DATEI, {"alarme": []}) or {"alarme": []}
+    werte = {w["symbol"]: w for w in items}
+    geaendert = False
+    for a in daten["alarme"]:
+        w = werte.get(a["symbol"])
+        if a.get("ausgeloest") or not w or not alarm_erreicht(a, w):
+            continue
+        if telegram(alarm_text(a, w)):
+            a["ausgeloest"] = now.strftime("%Y-%m-%d")
+            a["kurs_ausloesung"] = w["kurs"]
+            geaendert = True
+    if geaendert:
+        ALARM_DATEI.write_text(json.dumps(daten, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    return daten["alarme"]
 
 
 # ---------------------------------------------------------------- Wochenbericht
@@ -852,6 +882,14 @@ def wochenbericht(items, entdecken, state, now):
     if heiss:
         zeilen += ["", f"🔥 <b>Heiß gelaufen:</b> {', '.join(name(w) for w in heiss[:6])}"]
 
+    log = state.get("woche_log", [])
+    for art, titel, n in (("insider", "🟢 <b>Insider-Käufe</b>", 6), ("politiker", "🏛 <b>Politiker-Trades</b>", 5), ("13f", "🏦 <b>Neue Meldungen großer Investoren</b>", 4)):
+        eintraege = [m["text"] for m in log if m["art"] == art]
+        if eintraege:
+            zeilen += ["", titel] + [f"• {t}" for t in eintraege[:n]]
+            if len(eintraege) > n:
+                zeilen.append(f"… und {len(eintraege) - n} weitere")
+
     schon = state.get("woche_ideen", [])
     ideen = [x for x in entdecken if not x.get("in_watchlist") and (x.get("score") or 0) >= 70 and x["symbol"] not in schon][:3]
     if ideen:
@@ -862,10 +900,13 @@ def wochenbericht(items, entdecken, state, now):
 
     repo = os.environ.get("GITHUB_REPOSITORY") or "JanSchnell/AktienTracker"
     owner, name_repo = repo.split("/")
-    zeilen += ["", "Automatisch aus festen Regeln erstellt, keine Kaufempfehlung.", f"https://{owner.lower()}.github.io/{name_repo}/"]
+    fuss = ["", "Automatisch aus festen Regeln erstellt, keine Kaufempfehlung.", f"https://{owner.lower()}.github.io/{name_repo}/"]
+    # Telegram erlaubt 4096 Zeichen. Zeilenweise kürzen, damit keine Formatierung zerschnitten wird.
+    while len("\n".join(zeilen + fuss)) > 3900:
+        zeilen.pop()
     # Ideen rotieren: bereits genannte erst wieder nach längerer Zeit
     stand = {"woche_stufen": stufen_neu, "woche_ideen": (schon + [x["symbol"] for x in ideen])[-30:]}
-    return "\n".join(zeilen)[:4000], stand
+    return "\n".join(zeilen + fuss), stand
 
 
 # ---------------------------------------------------------------- 13F-Filings großer Investoren
@@ -906,7 +947,7 @@ def parse_13f_table(cik, acc):
     return pos
 
 
-def investor_holdings(inv, state, alerts):
+def investor_holdings(inv, state, meldungen):
     cik = str(inv["cik"]).zfill(10)
     sub = sec_get(f"https://data.sec.gov/submissions/CIK{cik}.json")
     r = sub["filings"]["recent"]
@@ -947,15 +988,13 @@ def investor_holdings(inv, state, alerts):
         "link": f"https://www.sec.gov/cgi-bin/browse-edgar?action=getcompany&CIK={cik}&type=13F-HR",
     }
     if cached and state.get("initialisiert"):
-        n_neu = [x["name"] for x in pos if x["aenderung"] == "neu"][:5]
-        n_auf = [x["name"] for x in pos if x["aenderung"] == "aufgestockt"][:5]
-        n_weg = [x["name"] for x in pos if x["aenderung"] == "verkauft"][:5]
-        alerts.append(
-            f"🏦 Neues 13F von <b>{inv['name']}</b> (Stichtag {rdat})\n"
-            + (f"Neu: {', '.join(n_neu)}\n" if n_neu else "")
-            + (f"Aufgestockt: {', '.join(n_auf)}\n" if n_auf else "")
-            + (f"Komplett verkauft: {', '.join(n_weg)}" if n_weg else "")
-        )
+        # Lange Depots kurz halten: je Art nur wenige Namen
+        kurz = []
+        for titel, art in (("neu", "neu"), ("komplett verkauft", "verkauft")):
+            namen = [html.escape(x["name"]) for x in pos if x["aenderung"] == art]
+            if namen:
+                kurz.append(f"{titel} {', '.join(namen[:4])}" + (f" +{len(namen) - 4}" if len(namen) > 4 else ""))
+        meldungen.append({"art": "13f", "text": f"{html.escape(inv['name'])} (Stichtag {rdat}): " + ("; ".join(kurz) or "nur Änderungen an bestehenden Positionen")})
     cache[cik] = {"acc": acc_neu, "ergebnis": ergebnis}
     return ergebnis
 
@@ -968,11 +1007,16 @@ def main():
     investors = (load_json(CONFIG / "investors.json", {}) or {}).get("investoren", [])
     state = load_json(STATE_FILE, {}) or {}
     profiles = load_profiles()
-    alerts, fehler, items, politik = [], [], [], []
+    meldungen, fehler, items, politik = [], [], [], []
+    # Frühere Alarm-Stände ablösen: die Stufen dienen einmalig als Vergleich für den ersten Bericht
+    alte_stufen = state.pop("stufen", None)
+    if alte_stufen and "woche_stufen" not in state:
+        state["woche_stufen"] = alte_stufen
+    state.pop("heiss", None)
 
     for e in watch:
         try:
-            items.append(process_ticker(e, rules, state, alerts, profiles, politik))
+            items.append(process_ticker(e, rules, state, meldungen, profiles, politik))
             print("ok   ", e["symbol"])
         except Exception as ex:
             fehler.append({"symbol": e["symbol"], "fehler": scrub(ex)})
@@ -983,39 +1027,37 @@ def main():
     for inv in investors:
         try:
             # Beschreibung frisch aus der Konfiguration, das Filing-Ergebnis kann aus dem Cache kommen
-            inv_out.append({**investor_holdings(inv, state, alerts), "person": inv.get("person"), "kurz": inv.get("kurz"), "beschreibung": inv.get("beschreibung")})
+            inv_out.append({**investor_holdings(inv, state, meldungen), "person": inv.get("person"), "kurz": inv.get("kurz"), "beschreibung": inv.get("beschreibung")})
             print("ok    13F", inv["name"])
         except Exception as ex:
             fehler.append({"symbol": f"13F {inv['name']}", "fehler": scrub(ex)})
             print("FEHLER 13F", inv["name"], scrub(ex))
 
     entdecken = scan_universe(watch, rules, profiles, items)
+    alarme = alarme_pruefen(items, datetime.now(timezone.utc))
     now = datetime.now(timezone.utc).isoformat(timespec="minutes")
     namen = {e["symbol"]: e["name"] for e in watch}
     for x in politik:
         x["name"] = namen.get(x["symbol"], x["symbol"])
     politik.sort(key=lambda x: (x.get("gemeldet") or "", x.get("datum") or ""), reverse=True)
-    save_json(OUT / "overview.json", {"aktualisiert": now, "regeln": rules, "werte": items, "fehler": fehler, "fx": wechselkurse(items, entdecken),
+    save_json(OUT / "overview.json", {"aktualisiert": now, "regeln": rules, "werte": items, "fehler": fehler, "fx": wechselkurse(items, entdecken), "alarme": alarme,
                                       "repo": os.environ.get("GITHUB_REPOSITORY") or "JanSchnell/AktienTracker"})
     save_json(OUT / "investoren.json", {"aktualisiert": now, "investoren": inv_out, "politiker": politik})
     save_json(OUT / "entdecken.json", {"aktualisiert": now, "werte": entdecken})
 
-    if alerts and state.get("initialisiert"):
-        for a in alerts:
-            telegram(a)
-    elif alerts:
-        print(f"Erster Lauf: {len(alerts)} Meldungen nicht gesendet (nur Ausgangszustand gespeichert).")
+    if state.get("initialisiert"):
+        state["woche_log"] = (state.get("woche_log", []) + meldungen)[-200:]
     jetzt = datetime.now(timezone.utc)
     erzwungen = os.environ.get("WOCHENBERICHT") == "true"
     if erzwungen or (state.get("initialisiert") and jetzt.weekday() in (6, 0) and state.get("woche_gesendet") != woche_key(jetzt)):
         text, stand = wochenbericht(items, entdecken, state, jetzt)
-        telegram(text)
-        # Ein manueller Test ändert nichts am regulären Bericht
-        if not erzwungen:
-            state.update(stand, woche_gesendet=woche_key(jetzt))
+        # Scheitert das Senden, bleibt alles gesammelt und der nächste Lauf versucht es erneut.
+        # Ein manueller Test ändert nichts am regulären Bericht.
+        if telegram(text) and not erzwungen:
+            state.update(stand, woche_gesendet=woche_key(jetzt), woche_log=[])
     state["initialisiert"] = True
     save_json(STATE_FILE, state)
-    print(f"Fertig: {len(items)} Werte, {len(inv_out)} Investoren, {len(fehler)} Fehler, {len(alerts)} Meldungen.")
+    print(f"Fertig: {len(items)} Werte, {len(inv_out)} Investoren, {len(fehler)} Fehler, {len(meldungen)} neue Meldungen für den Wochenbericht.")
     return 0 if items else 1
 
 

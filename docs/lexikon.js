@@ -39,7 +39,6 @@ const LEXIKON = [
     { id: "qq", name: "Q/Q oder „ggü. Vorquartal“ (QoQ)", kurz: "Vergleich mit dem direkt davorliegenden Quartal.",
       text: "Das 3. Quartal 2026 wird mit dem 2. Quartal 2026 verglichen. Zeigt die aktuelle Dynamik, kann aber durch Saisoneffekte täuschen. Ein Weihnachtsgeschäft macht das 1. Quartal danach immer „schwach“.",
       faust: "Bei stark saisonalen Firmen immer auch den Vorjahresvergleich ansehen." },
-    { id: "ytd", name: "YTD (seit Jahresbeginn)", kurz: "Kursentwicklung seit dem letzten Handelstag des Vorjahres.", text: "YTD = year to date. Im Kurschart als eigener Zeitraum auswählbar." },
     { id: "cagr", name: "pro Jahr (CAGR)", kurz: "Durchschnittliches jährliches Wachstum über mehrere Jahre, mit Zinseszins.",
       text: "Aus 100 werden in 3 Jahren 133: Das sind rund 10 % pro Jahr. Der Kennzahlen-Check nutzt das, um mehrere Jahre auf eine Zahl zu bringen." },
     { id: "pp", name: "Pp. (Prozentpunkte)", kurz: "Differenz zwischen zwei Prozentwerten.",

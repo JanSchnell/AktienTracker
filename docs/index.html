@@ -8,7 +8,11 @@
   <meta name="theme-color" content="#0f172a">
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" href="icon.svg" type="image/svg+xml">
-  <link rel="apple-touch-icon" href="icon.svg">
+  <link rel="apple-touch-icon" href="icon-180.png">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="Aktien">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black">
   <link rel="stylesheet" href="style.css">
   <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 </head>
@@ -22,11 +26,12 @@
       <nav class="tabs" id="tabs">
         <a href="#/" data-tab="uebersicht">Übersicht</a>
         <a href="#/entdecken" data-tab="entdecken">Entdecken</a>
+        <a href="#/investoren" data-tab="investoren">Investoren</a>
         <div class="mehr">
           <button type="button" id="mehrBtn" aria-haspopup="true" aria-expanded="false">Mehr ▾</button>
           <div class="mehr-menu" id="mehrMenu" hidden>
+            <a href="#/alarme" data-tab="alarme">Preisalarme</a>
             <a href="#/vergleich" data-tab="vergleich">Aktien vergleichen</a>
-            <a href="#/investoren" data-tab="investoren">Große Investoren</a>
             <a href="#/lexikon" data-tab="lexikon">Lexikon</a>
             <a href="#/regeln" data-tab="regeln">Kaufregeln & Beträge</a>
           </div>
