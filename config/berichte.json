@@ -1,0 +1,12 @@
+{
+  "_hinweis": "Ergänzt Yahoo Finance: Berichtsrhythmus und nächster Termin, wenn Yahoo kein künftiges Datum kennt. Ein künftiges Yahoo-Datum hat immer Vorrang. 'sicher': true = vom Unternehmen selbst genannt, sonst Schätzung eines Drittanbieters (Stand der Recherche: 2026-11-05). Vergangene Termine werden nicht angezeigt, also hier gelegentlich nachtragen.",
+  "ADYEN.AS": { "rhythmus": "Vollständige Zahlen halbjährlich, dazwischen kurze Geschäfts-Updates", "naechste": "2027-02-12", "sicher": false, "quelle": "AJ Bell" },
+  "MC.PA": { "rhythmus": "Vollständige Zahlen halbjährlich, dazwischen nur Umsatzmeldungen", "naechste": "2027-01-27", "sicher": false, "quelle": "AJ Bell, MarketScreener" },
+  "SU.PA": { "rhythmus": "Vollständige Zahlen halbjährlich, dazwischen nur Umsatzmeldungen", "naechste": "2027-02-17", "sicher": false, "quelle": "MarketScreener" },
+  "RR.L": { "rhythmus": "Vollständige Zahlen halbjährlich, dazwischen kurze Geschäfts-Updates", "naechste": "2027-03-03", "sicher": false, "quelle": "MarketScreener" },
+  "SAF.PA": { "rhythmus": "Vollständige Zahlen halbjährlich, dazwischen nur Umsatzmeldungen", "naechste": "2027-02-09", "sicher": true, "quelle": "Safran, Finanzkalender" },
+  "BA.L": { "rhythmus": "Vollständige Zahlen halbjährlich, dazwischen kurze Geschäfts-Updates", "naechste": "2027-02-24", "sicher": false, "quelle": "MarketScreener" },
+  "RIO.L": { "rhythmus": "Vollständige Zahlen halbjährlich, dazwischen Produktionsberichte", "naechste": "2027-02-19", "sicher": false, "quelle": "AJ Bell" },
+  "ASML.AS": { "naechste": "2027-01-26", "sicher": false, "quelle": "MarketScreener" },
+  "SAP.DE": { "naechste": "2027-01-27", "sicher": false, "quelle": "MarketScreener" }
+}

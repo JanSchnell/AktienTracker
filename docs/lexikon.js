@@ -69,7 +69,7 @@ const LEXIKON = [
       text: "Zeigt, wie gut das Unternehmen mit dem Geld der Eigentümer wirtschaftet. Kann durch viele Schulden oder Rückkäufe künstlich hoch sein.",
       faust: "Ab 15 % gut. Extrem hohe Werte bei sehr wenig Eigenkapital sind nicht aussagekräftig." },
     { id: "gewinnwachstum", name: "Gewinnwachstum", kurz: "Veränderung des Gewinns im letzten Quartal gegenüber demselben Quartal des Vorjahres.", text: "Sollte langfristig mindestens so schnell wachsen wie der Umsatz. Dann wird das Geschäft mit zunehmender Größe profitabler." },
-    { id: "ampel", name: "Quartals-Ampel", kurz: "Automatische Einordnung des letzten Quartals in Grün, Gelb oder Rot.", text: "Berücksichtigt Umsatz und EPS gegenüber dem Vorjahr, die Margenänderung und ob der Free Cashflow negativ ist. Die Punkte sind eine Faustregel und ersetzen keinen Blick in den Bericht." },
+    { id: "ampel", name: "Quartals-Ampel", kurz: "Automatische Einordnung der letzten Zahlen in Grün, Gelb oder Rot.", text: "Berücksichtigt Umsatz und EPS gegenüber dem Vorjahr, die Margenänderung und ob der Free Cashflow negativ ist. Bei Firmen, für die keine Quartalszahlen vorliegen, bewertet sie das letzte volle Geschäftsjahr. Die Punkte sind eine Faustregel und ersetzen keinen Blick in den Bericht." },
     { id: "check", name: "Kennzahlen-Check", kurz: "Automatische Antworten auf typische Fragen an ein Unternehmen, aus den Jahreszahlen berechnet.", text: "Grün = günstig, Gelb = neutral, Rot = genauer hinschauen. Die Grenzwerte sind Faustregeln. In manchen Branchen ist etwas anderes normal." },
   ]},
   { gruppe: "Bilanz und Aktionäre", eintraege: [

@@ -22,6 +22,7 @@ Das Tool **kauft und verkauft nichts** und ist keine Anlageberatung. Es zeigt Da
 |---|---|
 | `config/watchlist.json` | Deine Werte (Yahoo-Ticker, Name, Typ, Kategorie) |
 | `config/rules.json` | Kaufstufen und Grundbeträge |
+| `config/berichte.json` | Berichtsrhythmus und nächster Termin, wenn Yahoo kein künftiges Datum kennt |
 | `config/investors.json` | Beobachtete Investoren (SEC-CIK-Nummer) |
 | `scripts/update.py` | Lädt alle Daten und schickt Telegram-Nachrichten |
 | `docs/` | Die Webseite (Dashboard) |

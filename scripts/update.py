@@ -441,8 +441,8 @@ def fundamentals(t, info):
     except Exception:
         pass
 
-    out["ampel"] = ampel(out)
     out["jahre"] = annual(t)
+    out["ampel"] = ampel(out) or ampel_jahr(out["jahre"])
     out["pruefung"] = pruefung(out["jahre"], info, out["sektor"])
     out["management"] = officers(info)
     out["mitarbeiter"] = clean(info.get("fullTimeEmployees"))
@@ -489,14 +489,9 @@ def congress_trades(sym):
     return out
 
 
-def ampel(f):
-    """Einfache Trend-Ampel aus dem letzten Quartal: grün / gelb / rot + Begründungen."""
-    q = f.get("quartale") or []
-    if not q:
-        return None
-    last = q[-1]
+def ampel_wertung(uy, ey, d, fcf):
+    """Grün / gelb / rot + Begründungen aus Umsatz- und EPS-Wachstum, Margenänderung (Pp.) und Free Cashflow."""
     punkte, gruende = 0, []
-    uy = last.get("umsatz_yoy")
     if uy is not None:
         if uy >= 10:
             punkte += 1; gruende.append(f"Umsatz +{uy:.0f} % ggü. Vorjahr")
@@ -504,22 +499,61 @@ def ampel(f):
             punkte -= 1; gruende.append(f"Umsatz {uy:.0f} % ggü. Vorjahr")
         else:
             gruende.append(f"Umsatz +{uy:.0f} % ggü. Vorjahr")
-    ey = last.get("eps_yoy")
     if ey is not None:
         if ey >= 10:
             punkte += 1; gruende.append(f"Gewinn/Aktie +{ey:.0f} %")
         elif ey < 0:
             punkte -= 1; gruende.append(f"Gewinn/Aktie {ey:.0f} %")
-    if len(q) >= 2 and last.get("operative_marge") is not None and q[-2].get("operative_marge") is not None:
-        d = (last["operative_marge"] - q[-2]["operative_marge"]) * 100
+    if d is not None:
         if d >= 1:
             punkte += 1; gruende.append(f"op. Marge +{d:.1f} Pp.")
         elif d <= -2:
             punkte -= 1; gruende.append(f"op. Marge {d:.1f} Pp.")
-    if last.get("fcf") is not None and last["fcf"] < 0:
+    if fcf is not None and fcf < 0:
         punkte -= 1; gruende.append("negativer Free Cashflow")
     farbe = "gruen" if punkte >= 2 else "rot" if punkte <= -1 else "gelb"
     return {"farbe": farbe, "punkte": punkte, "gruende": gruende}
+
+
+def margen_diff(a, b):
+    """Änderung der operativen Marge von a nach b in Prozentpunkten."""
+    if a.get("operative_marge") is None or b.get("operative_marge") is None:
+        return None
+    return (b["operative_marge"] - a["operative_marge"]) * 100
+
+
+def ampel(f):
+    """Einfache Trend-Ampel aus dem letzten Quartal."""
+    q = f.get("quartale") or []
+    if not q:
+        return None
+    last = q[-1]
+    d = margen_diff(q[-2], last) if len(q) >= 2 else None
+    return ampel_wertung(last.get("umsatz_yoy"), last.get("eps_yoy"), d, last.get("fcf"))
+
+
+def ampel_jahr(jahre):
+    """Dieselbe Ampel aus dem letzten vollen Geschäftsjahr, für Werte ohne Quartalsdaten bei Yahoo."""
+    j = [e for e in jahre if e.get("umsatz")]
+    if len(j) < 2 or j[-1]["jahr"] - j[-2]["jahr"] != 1:
+        return None
+    a, b = j[-2], j[-1]
+    ey = pct(b["eps"], a["eps"]) if (a["eps"] or 0) > 0 else None
+    return {**ampel_wertung(pct(b["umsatz"], a["umsatz"]), ey, margen_diff(a, b), b["fcf"]), "basis": "jahr", "jahr": b["jahr"]}
+
+
+def termin_ergaenzen(f, sym, berichte, heute):
+    """Vergangene Yahoo-Termine verwerfen und aus config/berichte.json ergänzen. Ein künftiges Yahoo-Datum hat Vorrang."""
+    b = berichte.get(sym) or {}
+    f["berichtsrhythmus"] = b.get("rhythmus")
+    f["naechste_zahlen_geschaetzt"] = False
+    if (f.get("naechste_zahlen") or "")[:10] >= heute:
+        return
+    # Die Analystenschätzungen gehören zum abgelaufenen Termin
+    f["naechste_zahlen"] = f["erwartung_eps"] = f["erwartung_umsatz"] = None
+    if (b.get("naechste") or "") >= heute:
+        f["naechste_zahlen"] = b["naechste"]
+        f["naechste_zahlen_geschaetzt"] = not b.get("sicher")
 
 
 def insider_trades(t):
@@ -708,6 +742,8 @@ def process_ticker(entry, rules, state, meldungen, profiles, politik):
 
     is_etf = entry.get("typ") == "etf"
     f = None if is_etf else fundamentals(t, info)
+    if f:
+        termin_ergaenzen(f, sym, load_json(CONFIG / "berichte.json", {}) or {}, datetime.now().strftime("%Y-%m-%d"))
     ins = [] if is_etf else insider_trades(t)
     bestand = [] if is_etf or "." in sym else insider_bestand(t)
     since = (datetime.now() - timedelta(days=90)).strftime("%Y-%m-%d")
@@ -731,6 +767,7 @@ def process_ticker(entry, rules, state, meldungen, profiles, politik):
         "kgv": (f or {}).get("kgv"),
         "kgv_erwartet": (f or {}).get("kgv_erwartet"),
         "naechste_zahlen": (f or {}).get("naechste_zahlen"),
+        "naechste_zahlen_geschaetzt": (f or {}).get("naechste_zahlen_geschaetzt"),
         "kursziel": (f or {}).get("kursziel"),
         "insider_kaeufe_90t": len(ins_kaeufe_90),
         "politiker_90t": len(pol_90),
@@ -813,10 +850,11 @@ def alarm_text(a, w):
          f"Aktuell: <b>{de_zahl(w['kurs'])} {cur}</b> ({fmt_pct(w.get('tag_pct')).replace('.', ',')} heute)",
          f"{de_zahl(w['rueckgang_ath'], 0)} % unter dem Allzeithoch"]
     if (w.get("ampel") or {}).get("farbe"):
-        z.append("Letztes Quartal: " + {"gruen": "stark", "gelb": "gemischt", "rot": "schwach"}[w["ampel"]["farbe"]])
+        titel = f"Geschäftsjahr {w['ampel']['jahr']}" if w["ampel"].get("basis") == "jahr" else "Letztes Quartal"
+        z.append(f"{titel}: " + {"gruen": "stark", "gelb": "gemischt", "rot": "schwach"}[w["ampel"]["farbe"]])
     if (w.get("naechste_zahlen") or "") >= datetime.now().strftime("%Y-%m-%d"):
         n = w["naechste_zahlen"]
-        z.append(f"Nächste Quartalszahlen: {n[8:10]}.{n[5:7]}.{n[:4]}")
+        z.append(f"Nächste Zahlen: {'ca. ' if w.get('naechste_zahlen_geschaetzt') else ''}{n[8:10]}.{n[5:7]}.{n[:4]}")
     if a.get("notiz"):
         z += ["", f"Deine Notiz: {html.escape(a['notiz'])}"]
     repo = os.environ.get("GITHUB_REPOSITORY") or "JanSchnell/AktienTracker"
@@ -867,7 +905,7 @@ def wochenbericht(items, entdecken, state, now):
     zahlen = sorted((w for w in items if heute <= (w.get("naechste_zahlen") or "")[:10] <= bis), key=lambda w: w["naechste_zahlen"])
     if zahlen:
         zeilen += ["", "<b>Quartalszahlen in den nächsten Tagen</b>"]
-        zeilen += [f"• {w['naechste_zahlen'][8:10]}.{w['naechste_zahlen'][5:7]}. {name(w)}" for w in zahlen[:12]]
+        zeilen += [f"• {'ca. ' if w.get('naechste_zahlen_geschaetzt') else ''}{w['naechste_zahlen'][8:10]}.{w['naechste_zahlen'][5:7]}. {name(w)}" for w in zahlen[:12]]
         if len(zahlen) > 12:
             zeilen.append(f"… und {len(zahlen) - 12} weitere")
 

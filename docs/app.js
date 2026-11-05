@@ -155,7 +155,7 @@ const COLS = [
   { key: "abstand_sma200", label: "vs. 200-Tage", get: (w) => w.abstand_sma200, hide: true },
   { key: "perf_1j", label: "1 Jahr", get: (w) => w.perf_1j, hide: true },
   { key: "kgv_erwartet", label: "KGV erw.", get: (w) => w.kgv_erwartet, hide: true },
-  { key: "ampel", label: "Quartal", get: (w) => (w.ampel ? w.ampel.punkte : null), hide: true },
+  { key: "ampel", label: "Ampel", get: (w) => (w.ampel ? w.ampel.punkte : null), hide: true },
   { key: "pruefung_gruen", label: "Check", get: (w) => (w.pruefung_anzahl ? w.pruefung_gruen / w.pruefung_anzahl : null), hide: true },
   { key: "score", label: "Score", get: (w) => (w.screen ? w.screen.score : null), hide: true },
   { key: "naechste_zahlen", label: "Zahlen am", get: (w) => w.naechste_zahlen || "9999", hide: true },
@@ -269,10 +269,10 @@ function renderRows() {
       <td class="hide-m ${cls(w.abstand_sma200)}">${fmtPct(w.abstand_sma200)}</td>
       <td class="hide-m ${cls(w.perf_1j)}">${fmtPct(w.perf_1j)}</td>
       <td class="hide-m">${fmt(w.kgv_erwartet, 1)}</td>
-      <td class="hide-m">${w.ampel ? `<span class="dot ${w.ampel.farbe}" title="${esc(w.ampel.gruende.join(" · "))}"></span>` : "–"}</td>
+      <td class="hide-m">${w.ampel ? `<span class="dot ${w.ampel.farbe}" title="${esc((w.ampel.basis === "jahr" ? `Geschäftsjahr ${w.ampel.jahr}: ` : "") + w.ampel.gruende.join(" · "))}"></span>` : "–"}</td>
       <td class="hide-m" title="Grüne Antworten im Kennzahlen-Check">${checkBadge(w)}</td>
       <td class="hide-m" title="Daten-Score, siehe Lexikon">${w.screen && w.screen.score != null ? w.screen.score : "–"}</td>
-      <td class="hide-m">${w.naechste_zahlen ? date(w.naechste_zahlen) + (z != null && z >= 0 && z <= 14 ? ` <span class="badge watch">${z} T</span>` : "") : "–"}</td>
+      <td class="hide-m">${z != null && z >= 0 ? (w.naechste_zahlen_geschaetzt ? "ca. " : "") + date(w.naechste_zahlen) + (z <= 14 ? ` <span class="badge watch">${z} T</span>` : "") : w.typ === "etf" ? "–" : "noch offen"}</td>
       <td class="x-col"><button class="x-btn" data-rm="${esc(w.symbol)}" title="${esc(w.name)} entfernen" aria-label="${esc(w.name)} entfernen">✕</button></td>
     </tr>`;
   }).join("") || `<tr><td colspan="${COLS.length + 1}" class="muted">Keine Treffer</td></tr>`;
@@ -416,7 +416,7 @@ function valuationSection(w, f, cur) {
       ${kv(term("dividende", "Dividendenrendite"), f.dividendenrendite != null ? fmt(f.dividendenrendite, 2) + " %" : "keine")}
       ${kv(term("kursziel", "Analysten-Kursziel"), f.kursziel ? `${fmt(f.kursziel)} <span class="small ${cls(f.kursziel - w.kurs)}">${fmtPct((f.kursziel / w.kurs - 1) * 100, 0)}</span>` : "–")}
       ${kv(term("konsens", "Analysten-Konsens"), `${esc(EMPFEHLUNG[f.analysten_empfehlung] || f.analysten_empfehlung || "–")} <span class="small muted">${f.analysten_anzahl ? f.analysten_anzahl + " Analysten" : ""}</span>`)}
-      ${kv("Nächste Quartalszahlen", f.naechste_zahlen ? date(f.naechste_zahlen) + (zTage != null && zTage >= 0 ? ` <span class="small muted">in ${zTage} T.</span>` : "") : "–")}
+      ${kv(f.berichtsrhythmus ? "Nächste Zahlen" : "Nächste Quartalszahlen", zTage != null && zTage >= 0 ? (f.naechste_zahlen_geschaetzt ? "ca. " : "") + date(f.naechste_zahlen) + ` <span class="small muted">in ${zTage} T.${f.naechste_zahlen_geschaetzt ? ", geschätzt" : ""}</span>` : "noch offen")}
       ${kv(term("eps", "Erwarteter EPS, nächstes Quartal"), f.erwartung_eps ? `${fmt(f.erwartung_eps)} <span class="small muted">${esc(cur)}</span>` : "–")}
     </div>
     <p class="muted small">Tipp: Blaue, unterstrichene Begriffe antippen, dann erscheint eine kurze Erklärung. Alle Begriffe stehen im <a href="#/lexikon">Lexikon</a>.
@@ -449,11 +449,13 @@ function priceSection(w, d) {
 
 function businessSection(f, cur) {
   const q = f.quartale || [];
+  const jahrBasis = f.ampel && f.ampel.basis === "jahr";
   return `
-    ${f.ampel && q.length ? `<div class="card ampel-box"><span class="dot ${f.ampel.farbe}" style="width:16px;height:16px;margin-top:3px"></span>
-      <div><strong>${{ gruen: "Starkes Quartal", gelb: "Gemischtes Quartal", rot: "Schwaches Quartal" }[f.ampel.farbe]}</strong>
-      <span class="muted small">(${term("ampel", "Ampel")}, Quartal bis ${esc(date(q[q.length - 1].periode))})</span>
+    ${f.ampel ? `<div class="card ampel-box"><span class="dot ${f.ampel.farbe}" style="width:16px;height:16px;margin-top:3px"></span>
+      <div><strong>${{ gruen: "Starkes", gelb: "Gemischtes", rot: "Schwaches" }[f.ampel.farbe]} ${jahrBasis ? "Geschäftsjahr" : "Quartal"}</strong>
+      <span class="muted small">(${term("ampel", "Ampel")}, ${jahrBasis ? `Geschäftsjahr ${f.ampel.jahr}` : `Quartal bis ${esc(date(q[q.length - 1].periode))}`})</span>
       <ul class="clean small">${f.ampel.gruende.map((g) => `<li>${esc(g)}</li>`).join("")}</ul></div></div>` : ""}
+    ${f.berichtsrhythmus ? `<p class="muted small">${esc(f.berichtsrhythmus)}.${jahrBasis ? " Yahoo liefert hier keine Zwischenzahlen, deshalb bewertet die Ampel das letzte volle Geschäftsjahr und nicht das letzte Halbjahr." : ""}</p>` : ""}
     ${yearsSection(f, cur)}
     ${q.length ? `
     <h3 class="sub-h">Quartale</h3>

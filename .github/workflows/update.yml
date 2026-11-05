@@ -3,10 +3,13 @@ name: Daten aktualisieren
 on:
   schedule:
     # Zeiten in UTC (Winterzeit: +1 h, Sommerzeit: +2 h deutsche Zeit), Montag bis Freitag
-    - cron: "30 6 * * 1-5"    # vor Xetra-Eröffnung
-    - cron: "30 11 * * 1-5"   # Mittag Europa
-    - cron: "0 15 * * 1-5"    # kurz nach US-Eröffnung
-    - cron: "30 21 * * 1-5"   # nach US-Börsenschluss
+    # Krumme Minuten: Zur vollen und halben Stunde ist GitHub oft überlastet und startet stark verspätet
+    - cron: "17 6 * * 1-5"    # vor Xetra-Eröffnung
+    - cron: "47 8 * * 1-5"    # kurz nach Xetra-Eröffnung
+    - cron: "23 10 * * 1-5"   # Vormittag Europa
+    - cron: "37 11 * * 1-5"   # Mittag Europa
+    - cron: "7 15 * * 1-5"    # kurz nach US-Eröffnung
+    - cron: "33 21 * * 1-5"   # nach US-Börsenschluss
     - cron: "0 16 * * 0"      # Sonntag: Telegram-Wochenbericht
   workflow_dispatch:           # manuell starten über den Actions-Tab
     inputs:
