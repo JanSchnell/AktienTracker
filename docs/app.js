@@ -311,7 +311,7 @@ async function renderDetail(sym) {
   $app.innerHTML = `<p class="muted">Lade ${esc(sym)} …</p>`;
   let d;
   try { d = await getJSON("data/werte/" + safe(sym) + ".json"); }
-  catch { $app.innerHTML = `<a class="back" href="#/">← Übersicht</a><p>Keine Daten für ${esc(sym)}. Ideen aus „Entdecken“ bekommen ihre Analyse beim nächsten automatischen Lauf.</p>`; return; }
+  catch { $app.innerHTML = `<p>Keine Daten für ${esc(sym)}. Ideen aus „Entdecken“ bekommen ihre Analyse beim nächsten automatischen Lauf.</p>`; return; }
   const w = d.item, f = d.fundamentaldaten, cur = w.waehrung || "";
   const idee = !!w.idee && !OV.werte.some((x) => x.symbol === w.symbol);
   w.zusatzkauf = betragFuer(w);
@@ -328,7 +328,6 @@ async function renderDetail(sym) {
   ].filter((s) => s && s[3]);
 
   $app.innerHTML = `
-    ${idee ? `<a class="back" href="#/entdecken">← Entdecken</a>` : `<a class="back" href="#/">← Übersicht</a>`}
     <div class="head">
       <div>
         <h1>${esc(w.langname || w.name)}</h1>
@@ -1105,6 +1104,32 @@ function renderRules() {
 // ------------------------------------------------------------ Router
 
 let warUebersicht = false, ovScroll = 0;
+
+// Eigener Verlauf, damit „Zurück“ zur vorherigen Seite führt und nicht immer zur Übersicht.
+// Unterseiten von Vergleich und Lexikon zählen als eine Seite.
+const verlauf = [];
+const seite = (h) => (h.startsWith("#/wert/") ? h : "#/" + (h.split("/")[1] || ""));
+const SEITEN = { "#/": "Übersicht", "#/entdecken": "Entdecken", "#/investoren": "Investoren", "#/alarme": "Preisalarme", "#/vergleich": "Vergleich", "#/lexikon": "Lexikon", "#/regeln": "Kaufregeln" };
+function seitenName(h) {
+  if (!h.startsWith("#/wert/")) return SEITEN[seite(h)] || "Übersicht";
+  const sym = decodeURIComponent(h.slice(7));
+  const w = OV.werte.find((x) => x.symbol === sym) || (ENT && ENT.werte.find((x) => x.symbol === sym));
+  return w ? w.name : sym;
+}
+function zurueckSetzen(h) {
+  const p = seite(h), n = verlauf.length;
+  if (n >= 2 && seite(verlauf[n - 2]) === p) verlauf.pop();
+  else if (n && seite(verlauf[n - 1]) === p) verlauf[n - 1] = h;
+  else verlauf.push(h);
+  const nav = document.getElementById("zurueck");
+  nav.hidden = p === "#/";
+  if (nav.hidden) return;
+  // Direkt geöffnete Ideen führen zurück zu „Entdecken“, alles andere zur Übersicht
+  const sym = h.startsWith("#/wert/") ? decodeURIComponent(h.slice(7)) : null;
+  const idee = sym && !OV.werte.some((x) => x.symbol === sym) && ENT && ENT.werte.some((x) => x.symbol === sym);
+  const ziel = verlauf[verlauf.length - 2] || (idee ? "#/entdecken" : "#/");
+  nav.innerHTML = `<a class="back" href="${esc(ziel)}">← ${esc(seitenName(ziel))}</a>${seite(ziel) !== "#/" ? ` <a class="back home" href="#/">Übersicht</a>` : ""}`;
+}
 const GRUPPE_MEHR = ["alarme", "vergleich", "lexikon", "regeln"];
 
 function route() {
@@ -1118,6 +1143,7 @@ function route() {
   document.getElementById("mehrBtn").classList.toggle("active", GRUPPE_MEHR.includes(tab));
   document.getElementById("mehrMenu").hidden = true;
   const teile = h.split("/").map(decodeURIComponent);
+  zurueckSetzen(h);
   warUebersicht = false;
   window.scrollTo(0, 0);
   if (h.startsWith("#/wert/")) return renderDetail(decodeURIComponent(h.slice(7)));
