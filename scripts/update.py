@@ -204,6 +204,15 @@ ROWS_INCOME = {
 }
 
 
+def brutto_marge(bruttogewinn, umsatz):
+    """Über 100 % ist unmöglich. Yahoo bucht bei manchen Firmen (z. B. Scout24) negative Herstellungskosten,
+    dann ist die Zahl nicht aussagekräftig und wird weggelassen."""
+    if not umsatz or umsatz <= 0 or bruttogewinn is None:
+        return None
+    m = bruttogewinn / umsatz
+    return m if m <= 1 else None
+
+
 def pick_row(df, names):
     for n in names:
         if df is not None and n in df.index:
@@ -252,7 +261,7 @@ def annual(t):
         if e["umsatz"] is None and e["nettogewinn"] is None:
             continue
         u = e["umsatz"]
-        e["bruttomarge"] = e["bruttogewinn"] / u if u and e["bruttogewinn"] is not None else None
+        e["bruttomarge"] = brutto_marge(e["bruttogewinn"], u)
         e["operative_marge"] = e["operatives_ergebnis"] / u if u and e["operatives_ergebnis"] is not None else None
         e["nettomarge"] = e["nettogewinn"] / u if u and e["nettogewinn"] is not None else None
         e["capex_quote"] = abs(e["capex"]) / u if u and e["capex"] is not None else None
@@ -380,7 +389,7 @@ def fundamentals(t, info):
         "peg": clean(info.get("trailingPegRatio") or info.get("pegRatio")),
         "kuv": clean(info.get("priceToSalesTrailing12Months")),
         "dividendenrendite": clean(info.get("dividendYield")),
-        "bruttomarge": clean(info.get("grossMargins")),
+        "bruttomarge": brutto_marge(clean(info.get("grossMargins")), 1),
         "operative_marge": clean(info.get("operatingMargins")),
         "nettomarge": clean(info.get("profitMargins")),
         "umsatzwachstum": clean(info.get("revenueGrowth")),
@@ -414,7 +423,7 @@ def fundamentals(t, info):
                 e[k] = clean(row.get(c)) if row is not None else None
             e["fcf"] = clean(fcf.get(c)) if fcf is not None and c in fcf.index else None
             u = e["umsatz"]
-            e["bruttomarge"] = e["bruttogewinn"] / u if u and e["bruttogewinn"] is not None else None
+            e["bruttomarge"] = brutto_marge(e["bruttogewinn"], u)
             e["operative_marge"] = e["operatives_ergebnis"] / u if u and e["operatives_ergebnis"] is not None else None
             e["nettomarge"] = e["nettogewinn"] / u if u and e["nettogewinn"] is not None else None
             quartale.append(e)
