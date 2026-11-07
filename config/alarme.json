@@ -1,4 +1,14 @@
 {
   "_hinweis": "Eigene Preisalarme. Werden über die Webseite angelegt, jeder Alarm löst einmal aus. Das Repository ist öffentlich, also auch diese Datei.",
-  "alarme": []
+  "alarme": [
+    {
+      "id": 1,
+      "symbol": "NVDA",
+      "art": "kurs_unter",
+      "wert": 170.0,
+      "notiz": "",
+      "erstellt": "2026-11-07",
+      "ausgeloest": null
+    }
+  ]
 }
