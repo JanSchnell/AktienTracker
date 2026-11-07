@@ -145,7 +145,7 @@ function zeichneVergleich(a, b, range) {
   const basisA = gemeinsam[0][1], basisB = pb.get(gemeinsam[0][0]);
   chartDefaults();
   const serie = (d, data, farbe) => ({ label: d.item.name, data, borderColor: farbe, backgroundColor: farbe, borderWidth: 2, pointRadius: 0, tension: 0.1 });
-  const kurz = ["1W", "1M", "6M"].includes(range);
+  const kurz = ["1W", "1M"].includes(range);
   vergleichChart = new Chart(document.getElementById("cVergleich"), {
     type: "line",
     data: { labels: gemeinsam.map((p) => p[0]), datasets: [
@@ -157,7 +157,7 @@ function zeichneVergleich(a, b, range) {
       plugins: { legend: { position: "bottom", labels: { boxWidth: 18, boxHeight: 2 } },
         tooltip: { callbacks: { title: (it) => date(it[0].label), label: (it) => `${it.dataset.label}: ${fmtPct(it.parsed.y)}` } } },
       scales: {
-        x: { ticks: { maxTicksLimit: 7, callback(v) { const l = this.getLabelForValue(v); return kurz ? l.slice(8, 10) + "." + l.slice(5, 7) + "." : range === "1J" ? l.slice(5, 7) + "/" + l.slice(2, 4) : l.slice(0, 4); } }, grid: { display: false } },
+        x: { ticks: { maxTicksLimit: 7, callback(v) { const l = this.getLabelForValue(v); return kurz ? l.slice(8, 10) + "." + l.slice(5, 7) + "." : range === "1J" || range === "5J" ? l.slice(5, 7) + "/" + l.slice(2, 4) : l.slice(0, 4); } }, grid: { display: false } },
         y: { ticks: { callback: (v) => fmt(v, 0) + " %" } },
       },
     },

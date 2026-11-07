@@ -703,7 +703,7 @@ function chartDefaults() {
   Chart.defaults.font.family = getComputedStyle(document.body).fontFamily;
 }
 
-const RANGES = [["1W", 7], ["1M", 30], ["6M", 182], ["1J", 365], ["Max", 1e6]];
+const RANGES = [["1W", 7], ["1M", 30], ["1J", 365], ["5J", 1825], ["Max", 1e6]];
 const gueltigerRange = (r) => (RANGES.some(([x]) => x === r) ? r : "1J");
 
 function rangePoints(hist, range) {
@@ -727,7 +727,7 @@ function drawPrice(d, range) {
   if (priceChart) { priceChart.destroy(); charts = charts.filter((c) => c !== priceChart); }
   $app.querySelectorAll("[data-r]").forEach((b) => b.classList.toggle("on", b.dataset.r === range));
   const pts = rangePoints(d.historie, range);
-  const kurz = ["1W", "1M", "6M"].includes(range);
+  const kurz = ["1W", "1M"].includes(range);
   const w = d.item;
   const line = (y, label, color) => ({ label, data: pts.map(() => y), borderColor: color, borderWidth: 1, borderDash: [5, 4], pointRadius: 0, fill: false });
   const accent = css("--accent");
@@ -757,7 +757,7 @@ function drawPrice(d, range) {
         tooltip: { callbacks: { title: (it) => date(it[0].label), label: (it) => `${it.dataset.label}: ${fmt(it.parsed.y)}` } },
       },
       scales: {
-        x: { ticks: { maxTicksLimit: 7, callback(v) { const l = this.getLabelForValue(v); return kurz ? l.slice(8, 10) + "." + l.slice(5, 7) + "." : range === "1J" ? l.slice(5, 7) + "/" + l.slice(2, 4) : l.slice(0, 4); } }, grid: { display: false } },
+        x: { ticks: { maxTicksLimit: 7, callback(v) { const l = this.getLabelForValue(v); return kurz ? l.slice(8, 10) + "." + l.slice(5, 7) + "." : range === "1J" || range === "5J" ? l.slice(5, 7) + "/" + l.slice(2, 4) : l.slice(0, 4); } }, grid: { display: false } },
         y: { ticks: { callback: (v) => fmt(v, dez) } },
       },
     },
