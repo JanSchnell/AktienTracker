@@ -17,11 +17,14 @@ const ALARM_ARTEN = [
   ["kurs_unter", "Kurs fällt auf …", "Kurs"],
   ["fall_heute", "Kurs fällt um … % ab heute", "Prozent"],
   ["rueckgang_ath", "Kurs liegt … % unter Allzeithoch", "Prozent"],
+  ["erholung", "Kurs erholt sich um … % vom Tiefpunkt", "Prozent"],
+  ["steig_heute", "Kurs steigt um … % ab heute", "Prozent"],
   ["kurs_ueber", "Kurs steigt auf …", "Kurs"],
 ];
 function alarmBeschreibung(a, cur) {
   if (a.art === "kurs_unter") return `Kurs fällt auf ${fmt(a.wert)} ${cur}`;
   if (a.art === "kurs_ueber") return `Kurs steigt auf ${fmt(a.wert)} ${cur}`;
+  if (a.art === "erholung") return `Kurs steigt ${fmt(a.wert, 0)} % über seinen Tiefpunkt`;
   return `Kurs ${fmt(a.wert, 0)} % unter Allzeithoch`;
 }
 
@@ -50,10 +53,11 @@ function alarmDialog(w) {
     if (art === "kurs_ueber" && v <= w.kurs) return { fehler: `Der Kurs liegt schon bei ${fmt(w.kurs)} ${cur}. Trage einen höheren Wert ein.` };
     if (art !== "kurs_unter" && art !== "kurs_ueber" && v >= 100) return { fehler: "Bitte einen Wert unter 100 % eintragen." };
     if (art === "rueckgang_ath" && v <= w.rueckgang_ath) return { fehler: `Der Kurs liegt schon ${fmt(w.rueckgang_ath, 0)} % unter dem Hoch. Trage einen höheren Wert ein.` };
-    if (art === "fall_heute") {
-      const ziel = Math.round(w.kurs * (1 - v / 100) * 100) / 100;
-      return { art: "kurs_unter", wert: ziel, info: `Das entspricht einem Kurs von ${fmt(ziel)} ${cur}.` };
+    if (art === "fall_heute" || art === "steig_heute") {
+      const ziel = Math.round(w.kurs * (1 + (art === "fall_heute" ? -v : v) / 100) * 100) / 100;
+      return { art: art === "fall_heute" ? "kurs_unter" : "kurs_ueber", wert: ziel, info: `Das entspricht einem Kurs von ${fmt(ziel)} ${cur}.` };
     }
+    if (art === "erholung") return { art, wert: v, info: `Ab jetzt merkt sich das Tool den tiefsten Kurs. Steigt der Kurs danach um ${fmt(v, 0)} % über dieses Tief, kommt die Nachricht. Fällt er weiter, wandert die Grenze mit nach unten. Ab heute wäre das bei ${fmt(w.kurs * (1 + v / 100))} ${cur}.` };
     if (art === "rueckgang_ath") return { art, wert: v, info: `Das entspricht heute einem Kurs von etwa ${fmt(w.ath * (1 - v / 100))} ${cur}. Steigt das Hoch, steigt auch diese Grenze.` };
     return { art, wert: v, info: `Das sind ${fmtPct((v / w.kurs - 1) * 100)} gegenüber heute.` };
   };
@@ -83,6 +87,7 @@ function renderAlarme() {
   const loeschen = (a) => `<a class="x-btn" title="Alarm löschen" aria-label="Alarm löschen" target="_blank" rel="noopener" href="${issueUrl(`Alarm: löschen ${a.symbol}`, ["aktion: alarm_loeschen", `id: ${a.id}`])}">✕</a>`;
   const abstand = (a, w) => {
     if (a.art === "rueckgang_ath") return `aktuell ${fmt(w.rueckgang_ath, 0)} %`;
+    if (a.art === "erholung") return a.tief ? `Tief ${fmt(a.tief)} ${esc(w.waehrung || "")} am ${date(a.tief_datum)}, Alarm ab ${fmt(a.tief * (1 + a.wert / 100))}` : "startet beim nächsten Lauf";
     return `noch ${fmtPct((a.wert / w.kurs - 1) * 100)}`;
   };
   const optionen = [...OV.werte].sort((x, y) => x.name.localeCompare(y.name, "de")).map((w) => `<option value="${esc(w.symbol)}">${esc(w.name)}</option>`).join("");
@@ -252,12 +257,11 @@ function setupNav() {
     const treffer = [...OV.werte, ...ideen].filter((w) => [w.name, w.symbol, w.langname, w.kategorie, w.branche].join(" ").toLowerCase().includes(q)).slice(0, 8);
     liste.innerHTML = treffer.map((w) => OV.werte.includes(w)
       ? `<a href="#/wert/${encodeURIComponent(w.symbol)}"><strong>${esc(w.name)}</strong> <span class="sym">${esc(w.symbol)} · ${esc(w.kategorie)}</span></a>`
-      : `<a href="#/entdecken" data-idee="${esc(w.name)}"><strong>${esc(w.name)}</strong> <span class="sym">Idee in „Entdecken“ · ${esc(w.kategorie)}</span></a>`).join("") || `<div class="muted small" style="padding:8px">Keine Treffer. Über „Wert hinzufügen“ in der Übersicht lässt sich jede Aktie aufnehmen.</div>`;
+      : `<a href="#/wert/${encodeURIComponent(w.symbol)}"><strong>${esc(w.name)}</strong> <span class="sym">Idee in „Entdecken“ · ${esc(w.kategorie)}</span></a>`).join("") || `<div class="muted small" style="padding:8px">Keine Treffer. Über „Wert hinzufügen“ in der Übersicht lässt sich jede Aktie aufnehmen.</div>`;
   });
   liste.addEventListener("click", (ev) => {
     const a = ev.target.closest("a");
     if (!a) return;
-    if (a.dataset.idee) { entState.q = a.dataset.idee; entState.nurNeu = false; if (location.hash === "#/entdecken") renderEntdecken(); }
     schliessen();
   });
   document.addEventListener("keydown", (ev) => { if (ev.key === "Escape") schliessen(); });

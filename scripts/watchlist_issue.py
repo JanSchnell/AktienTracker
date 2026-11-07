@@ -11,7 +11,7 @@ Body-Format (eine Angabe pro Zeile):
 Preisalarme („Alarm: …“) ändern config/alarme.json:
     aktion: alarm_neu
     symbol: NVDA
-    art: kurs_unter | kurs_ueber | rueckgang_ath
+    art: kurs_unter | kurs_ueber | rueckgang_ath | erholung (wert in % über dem Tief seit Anlage)
     wert: 150.5
     notiz: Eigener Text (optional)
 oder
@@ -88,7 +88,7 @@ def alarm_aktion(p, aktion, werte):
     if not any(w["symbol"].upper() == sym.upper() for w in werte):
         RESULT.write_text(f"❌ `{sym}` steht nicht in der Watchlist. Bitte den Wert zuerst hinzufügen.", encoding="utf-8")
         return 1
-    if art not in ("kurs_unter", "kurs_ueber", "rueckgang_ath") or wert <= 0:
+    if art not in ("kurs_unter", "kurs_ueber", "rueckgang_ath", "erholung") or wert <= 0:
         RESULT.write_text("❌ Art oder Wert des Alarms ist ungültig, nichts geändert.", encoding="utf-8")
         return 1
     neu = {"id": max([a["id"] for a in daten["alarme"]], default=0) + 1, "symbol": sym, "art": art, "wert": wert,

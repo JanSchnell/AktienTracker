@@ -696,6 +696,50 @@ def entdecken_eintrag(entry, p, s, waehrung, in_watchlist, heiss):
         {k: p.get(k) for k in keys} | s | {"waehrung": waehrung, "in_watchlist": in_watchlist, "heiss": heiss}
 
 
+def kern_item(entry, info, p, f, heiss, rules):
+    """Gemeinsame Felder für die Analyse-Seite, für Watchlist-Werte und Ideen aus „Entdecken“."""
+    stufen = rules["stufen"]
+    grund = rules["grundbetrag"].get(entry.get("typ"), 0)
+    faktor = stufen[p["stufe"] - 1]["faktor"] if p["stufe"] else 0
+    f = f or {}
+    return {
+        **entry,
+        "langname": info.get("longName") or info.get("shortName"),
+        "waehrung": info.get("currency"),
+        **p,
+        "zusatzkauf": grund * faktor,
+        "naechste_stufe": next((s["ab_prozent"] for s in stufen if s["ab_prozent"] > p["rueckgang_ath"]), None),
+        "ampel": f.get("ampel"),
+        "kgv": f.get("kgv"),
+        "kgv_erwartet": f.get("kgv_erwartet"),
+        "naechste_zahlen": f.get("naechste_zahlen"),
+        "naechste_zahlen_geschaetzt": f.get("naechste_zahlen_geschaetzt"),
+        "kursziel": f.get("kursziel"),
+        "heiss": heiss,
+        "pruefung_gruen": sum(1 for x in f.get("pruefung", []) if x["farbe"] == "gruen"),
+        "pruefung_rot": sum(1 for x in f.get("pruefung", []) if x["farbe"] == "rot"),
+        "pruefung_anzahl": len(f.get("pruefung", [])),
+        "ceo": next((o["name"] for o in f.get("management", []) if o["ceo"]), None),
+        "sektor": f.get("sektor"),
+        "branche": f.get("branche"),
+    }
+
+
+def idee_detail(e, t, hist, info, p, s, heiss, rules):
+    """Analyse-Seite für eine Idee, damit sie sich vor der Aufnahme in die Watchlist ansehen lässt."""
+    try:
+        f = fundamentals(t, info)
+        termin_ergaenzen(f, e["symbol"], load_json(CONFIG / "berichte.json", {}) or {}, datetime.now().strftime("%Y-%m-%d"))
+    except Exception as ex:
+        print("FEHLER Idee Kennzahlen", e["symbol"], scrub(ex))
+        f = None
+    entry = {k: e[k] for k in ("symbol", "name", "kategorie") if k in e} | {"typ": "aktie"}
+    item = kern_item(entry, info, p, f, heiss, rules) | {"screen": s, "idee": True}
+    save_json(OUT / "werte" / f"{safe_name(e['symbol'])}.json", {
+        "item": item, "historie": history_series(hist), "fundamentaldaten": f, "insider": [], "insider_bestand": [],
+        "politiker": None, "profil": None, "idee": {k: e.get(k) for k in ("kurz", "these", "risiko", "thema")}})
+
+
 def scan_universe(watch, rules, profiles, items):
     """Daten-Score für die Watchlist und die zusätzlichen Ideen aus config/universe.json."""
     out = []
@@ -716,7 +760,9 @@ def scan_universe(watch, rules, profiles, items):
                 raise RuntimeError("keine Kursdaten")
             p = price_block(hist, rules["stufen"])
             info = t.info or {}
-            out.append(entdecken_eintrag(e, p, screen(info, p), info.get("currency"), False, overheat_level(p, "aktie", rules)))
+            sc, heiss = screen(info, p), overheat_level(p, "aktie", rules)
+            idee_detail(e, t, hist, info, p, sc, heiss, rules)
+            out.append(entdecken_eintrag(e, p, sc, info.get("currency"), False, heiss))
             print("ok    Idee", e["symbol"])
         except Exception as ex:
             print("FEHLER Idee", e["symbol"], scrub(ex))
@@ -754,30 +800,9 @@ def process_ticker(entry, rules, state, meldungen, profiles, politik):
     politik.extend(pol_90)
     heiss = overheat_level(p, entry.get("typ"), rules)
 
-    grund = rules["grundbetrag"].get(entry.get("typ"), 0)
-    faktor = stufen[p["stufe"] - 1]["faktor"] if p["stufe"] else 0
-    item = {
-        **entry,
-        "langname": info.get("longName") or info.get("shortName"),
-        "waehrung": info.get("currency"),
-        **p,
-        "zusatzkauf": grund * faktor,
-        "naechste_stufe": next((s["ab_prozent"] for s in stufen if s["ab_prozent"] > p["rueckgang_ath"]), None),
-        "ampel": (f or {}).get("ampel"),
-        "kgv": (f or {}).get("kgv"),
-        "kgv_erwartet": (f or {}).get("kgv_erwartet"),
-        "naechste_zahlen": (f or {}).get("naechste_zahlen"),
-        "naechste_zahlen_geschaetzt": (f or {}).get("naechste_zahlen_geschaetzt"),
-        "kursziel": (f or {}).get("kursziel"),
+    item = kern_item(entry, info, p, f, heiss, rules) | {
         "insider_kaeufe_90t": len(ins_kaeufe_90),
         "politiker_90t": len(pol_90),
-        "heiss": heiss,
-        "pruefung_gruen": sum(1 for x in (f or {}).get("pruefung", []) if x["farbe"] == "gruen"),
-        "pruefung_rot": sum(1 for x in (f or {}).get("pruefung", []) if x["farbe"] == "rot"),
-        "pruefung_anzahl": len((f or {}).get("pruefung", [])),
-        "ceo": next((o["name"] for o in (f or {}).get("management", []) if o["ceo"]), None),
-        "sektor": (f or {}).get("sektor"),
-        "branche": (f or {}).get("branche"),
         "screen": None if is_etf else screen(info, p),
     }
     detail = {"item": item, "historie": history_series(hist), "fundamentaldaten": f, "insider": ins, "insider_bestand": bestand,
@@ -836,6 +861,9 @@ def alarm_erreicht(a, w):
         return (w.get("tag_tief") or w["kurs"]) <= a["wert"]
     if a["art"] == "kurs_ueber":
         return (w.get("tag_hoch") or w["kurs"]) >= a["wert"]
+    if a["art"] == "erholung":
+        # Schlusskurs statt Tageshoch, sonst löst ein kurzer Ausschlag nach dem Tief schon aus
+        return bool(a.get("tief")) and w["kurs"] >= a["tief"] * (1 + a["wert"] / 100)
     return a["art"] == "rueckgang_ath" and w["rueckgang_ath"] >= a["wert"]
 
 
@@ -845,6 +873,8 @@ def alarm_text(a, w):
         "kurs_unter": f"Der Kurs ist auf deine Grenze von {de_zahl(a['wert'])} {cur} gefallen.",
         "kurs_ueber": f"Der Kurs ist auf deine Grenze von {de_zahl(a['wert'])} {cur} gestiegen.",
         "rueckgang_ath": f"Der Kurs liegt mindestens {de_zahl(a['wert'], 0)} % unter dem Allzeithoch.",
+        "erholung": f"Der Kurs ist um {de_zahl(a['wert'], 0)} % über seinen Tiefpunkt von {de_zahl(a.get('tief') or 0)} {cur}"
+                    f" ({a.get('tief_datum', '')[8:10]}.{a.get('tief_datum', '')[5:7]}.) gestiegen. Das kann heißen, dass der Boden erreicht ist, muss es aber nicht.",
     }[a["art"]]
     z = [f"🔔 <b>Preisalarm: {html.escape(w['name'])}</b>", grund, "",
          f"Aktuell: <b>{de_zahl(w['kurs'])} {cur}</b> ({fmt_pct(w.get('tag_pct')).replace('.', ',')} heute)",
@@ -864,6 +894,16 @@ def alarm_text(a, w):
     return "\n".join(z)
 
 
+def tief_merken(a, w):
+    """Tiefster Kurs seit Anlage des Erholungs-Alarms. True, wenn das Tief neu ist (dann noch nicht auslösen).
+    Beim ersten Lauf zählt der aktuelle Kurs, ab dem nächsten Handelstag auch das Tagestief."""
+    kandidat = w["kurs"] if not a.get("tief") or w["datum"] <= a.get("tief_datum", "") else min(w["kurs"], w.get("tag_tief") or w["kurs"])
+    if a.get("tief") and kandidat >= a["tief"]:
+        return False
+    a["tief"], a["tief_datum"] = round(kandidat, 4), w["datum"]
+    return True
+
+
 def alarme_pruefen(items, now):
     """Löst jeden Alarm einmal aus. Scheitert das Senden, bleibt er aktiv und wird beim nächsten Lauf wiederholt."""
     daten = load_json(ALARM_DATEI, {"alarme": []}) or {"alarme": []}
@@ -871,7 +911,12 @@ def alarme_pruefen(items, now):
     geaendert = False
     for a in daten["alarme"]:
         w = werte.get(a["symbol"])
-        if a.get("ausgeloest") or not w or not alarm_erreicht(a, w):
+        if a.get("ausgeloest") or not w:
+            continue
+        if a["art"] == "erholung" and tief_merken(a, w):
+            geaendert = True
+            continue
+        if not alarm_erreicht(a, w):
             continue
         if telegram(alarm_text(a, w)):
             a["ausgeloest"] = now.strftime("%Y-%m-%d")

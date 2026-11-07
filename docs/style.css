@@ -141,6 +141,7 @@ tbody tr:last-child td { border-bottom: 0; }
 .desc { max-height: 7.5em; overflow: hidden; position: relative; }
 .desc.open { max-height: none; }
 .links { display: flex; flex-wrap: wrap; gap: 8px 16px; font-size: .9rem; }
+.idee-hinweis { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; justify-content: space-between; }
 .note { border-left: 3px solid var(--accent); padding: 10px 14px; background: var(--card); border-radius: 0 10px 10px 0; margin: 12px 0; }
 .ampel-box { display: flex; gap: 10px; align-items: flex-start; }
 ul.clean { margin: 6px 0 0; padding-left: 18px; }

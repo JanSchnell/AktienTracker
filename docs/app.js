@@ -297,7 +297,7 @@ function ideenTeaser() {
   const neu = ENT.werte.filter((x) => !x.in_watchlist && x.bekannt === false && x.score != null).slice(0, 4);
   if (!neu.length) return "";
   return `<h2>Vielleicht noch nicht auf deinem Radar</h2>
-    <div class="grid teaser">${neu.map((x) => `<a class="card idee" href="#/entdecken">
+    <div class="grid teaser">${neu.map((x) => `<a class="card idee" href="#/wert/${encodeURIComponent(x.symbol)}">
       <div class="idee-kopf"><strong>${esc(x.name)}</strong><span class="score" title="Daten-Score">${x.score}</span></div>
       <div class="small muted">${esc(x.kategorie)}</div><div class="small" style="margin-top:6px">${esc(x.kurz || "")}</div></a>`).join("")}</div>
     <p class="muted small">Weniger bekannte Unternehmen mit der höchsten Punktzahl im <a href="#/entdecken">Entdecken-Tab</a>. Keine Kaufempfehlung.</p>`;
@@ -311,8 +311,9 @@ async function renderDetail(sym) {
   $app.innerHTML = `<p class="muted">Lade ${esc(sym)} …</p>`;
   let d;
   try { d = await getJSON("data/werte/" + safe(sym) + ".json"); }
-  catch { $app.innerHTML = `<a class="back" href="#/">← Übersicht</a><p>Keine Daten für ${esc(sym)}.</p>`; return; }
+  catch { $app.innerHTML = `<a class="back" href="#/">← Übersicht</a><p>Keine Daten für ${esc(sym)}. Ideen aus „Entdecken“ bekommen ihre Analyse beim nächsten automatischen Lauf.</p>`; return; }
   const w = d.item, f = d.fundamentaldaten, cur = w.waehrung || "";
+  const idee = !!w.idee && !OV.werte.some((x) => x.symbol === w.symbol);
   w.zusatzkauf = betragFuer(w);
 
   const sections = [
@@ -320,14 +321,14 @@ async function renderDetail(sym) {
     ["kurs", "Kurs", "Kursverlauf & Kaufstufe", priceSection(w, d)],
     f && ["zahlen", "Geschäftszahlen", "Geschäftszahlen", businessSection(f, cur)],
     d.profil && ["firma", "Unternehmen", w.typ === "etf" ? "Was steckt drin?" : "Das Unternehmen verstehen", profileSection(d.profil, w)],
-    !d.profil && w.typ !== "etf" && ["firma", "Unternehmen", "Das Unternehmen verstehen", profileSection(null, w)],
+    !d.profil && w.typ !== "etf" && ["firma", "Unternehmen", "Das Unternehmen verstehen", idee && d.idee ? ideeSection(d.idee) : profileSection(null, w)],
     f && ["mgmt", "Management", "Management & CEO", mgmtSection(f, d.profil, cur)],
     w.typ !== "etf" && ["bewegungen", "Insider & Investoren", "Insider, Investoren & Politiker", movesSection(d, w)],
     ["quellen", "Quellen", "Quellen & Links", sourcesSection(w, f, d.profil)],
   ].filter((s) => s && s[3]);
 
   $app.innerHTML = `
-    <a class="back" href="#/">← Übersicht</a>
+    ${idee ? `<a class="back" href="#/entdecken">← Entdecken</a>` : `<a class="back" href="#/">← Übersicht</a>`}
     <div class="head">
       <div>
         <h1>${esc(w.langname || w.name)}</h1>
@@ -338,7 +339,9 @@ async function renderDetail(sym) {
         <div class="${cls(w.tag_pct)}">${fmtPct(w.tag_pct, 2)} heute · Stand ${date(w.datum)}</div>
       </div>
     </div>
-    <div class="head-aktionen small"><a href="#/vergleich/${encodeURIComponent(w.symbol)}/">Vergleichen</a> · <button class="linkbtn" id="alarmBtn">Preisalarm setzen</button>${aktiveAlarme(w.symbol).length ? ` · <a href="#/alarme">🔔 ${aktiveAlarme(w.symbol).length} aktiv</a>` : ""}</div>
+    ${idee ? `<div class="note small idee-hinweis"><span><strong>Idee aus „Entdecken“, noch nicht in deiner Watchlist.</strong> Preisalarme, Insider- und Politiker-Daten gibt es erst nach der Aufnahme.</span>
+      <a class="chip on" href="${ideeAddUrl(w)}" target="_blank" rel="noopener">＋ Zur Watchlist</a></div>`
+    : `<div class="head-aktionen small"><a href="#/vergleich/${encodeURIComponent(w.symbol)}/">Vergleichen</a> · <button class="linkbtn" id="alarmBtn">Preisalarm setzen</button>${aktiveAlarme(w.symbol).length ? ` · <a href="#/alarme">🔔 ${aktiveAlarme(w.symbol).length} aktiv</a>` : ""}</div>`}
     ${glance(w, f, d.profil)}
     ${w.heiss ? `<div class="note hotnote">${heatBadge(w)} <strong>${esc(w.name)} liegt ${fmtPct(w.abstand_sma200, 0)} über der ${term("sma200", "200-Tage-Linie")}</strong> (${term("rsi", "RSI")} ${fmt(w.rsi, 0)}).
       Kein Verkaufssignal, aber ein guter Moment, die eigene These und die Positionsgröße zu prüfen. Mehr dazu unter <a href="#/regeln">Regeln</a>.</div>` : ""}
@@ -349,12 +352,14 @@ async function renderDetail(sym) {
     document.getElementById(b.dataset.goto).scrollIntoView({ behavior: "smooth" })));
   const desc = document.getElementById("desc");
   if (desc) document.getElementById("more").addEventListener("click", (e) => { desc.classList.toggle("open"); e.target.textContent = desc.classList.contains("open") ? "Weniger" : "Mehr anzeigen"; });
-  document.getElementById("alarmBtn").addEventListener("click", () => alarmDialog(w));
+  if (!idee) document.getElementById("alarmBtn").addEventListener("click", () => alarmDialog(w));
   $app.querySelectorAll("[data-firma]").forEach((b) => b.addEventListener("click", () => {
     $app.querySelectorAll("[data-firma]").forEach((x) => { x.classList.toggle("on", x === b); x.setAttribute("aria-selected", String(x === b)); });
     $app.querySelectorAll(".firma-gruppe").forEach((g) => g.classList.toggle("aktiv", g.dataset.gruppe === b.dataset.firma));
   }));
-  document.getElementById("rmDetail").addEventListener("click", () => removeDialog(w.symbol, w.name, () => { location.hash = "#/"; }));
+  const rm = document.getElementById("rmDetail");
+  if (rm && !idee) rm.addEventListener("click", () => removeDialog(w.symbol, w.name, () => { location.hash = "#/"; }));
+  else if (rm) rm.remove();
 
   drawPrice(d, gueltigerRange(store.get("range", "1J")));
   $app.querySelectorAll("[data-r]").forEach((b) => b.addEventListener("click", () => {
@@ -509,6 +514,16 @@ function profileSection(p, w) {
     </div>
     <p class="muted small">Quelle dieser Texte: von Claude zusammengefasst aus Wissen bis etwa Mitte 2026 (Profil-Stand ${esc(p.stand || "–")}), nicht live recherchiert. Marktgrößen und Pläne können sich geändert haben. Qualitative Einschätzung, keine Anlageberatung. Wichtige Punkte bitte im Geschäftsbericht prüfen, Links dazu stehen unter „Quellen & Links“.</p>`;
 }
+
+function ideeSection(x) {
+  return `<div class="grid two">
+      <div class="card"><h3>Kurz gesagt</h3><p class="small" style="margin:0">${esc(x.kurz || "–")}</p>
+        ${x.these ? `<p class="small" style="margin:10px 0 0"><strong>Mögliche These:</strong> ${esc(x.these)}</p>` : ""}</div>
+      <div class="card contra"><h3>Was dagegen spricht</h3><p class="small" style="margin:0">${esc(x.risiko || "–")}</p></div>
+    </div>
+    <p class="muted small">Ein ausführliches Profil (Geschäftsmodell, Burggraben, Management) bekommt der Wert, wenn er in der Watchlist steht und Claude es ergänzt. Texte: Claude, Wissen bis etwa Mitte 2026, keine Anlageberatung.</p>`;
+}
+const ideeAddUrl = (w) => issueUrl(`Watchlist: hinzufügen ${w.symbol}`, ["aktion: hinzufuegen", `symbol: ${w.symbol}`, `name: ${w.name}`, `kategorie: ${w.kategorie}`, "typ: aktie"]);
 
 function checkSection(f) {
   const p = f.pruefung || [];
@@ -825,6 +840,13 @@ function multiHolders() {
     </tbody></table></div>`;
 }
 
+// Die Chips sind nur Ansichten, bearbeiten muss man hier nichts
+const INV_FILTER = [
+  ["aenderungen", "Nur Änderungen", "Zeigt, was jeder Investor im letzten gemeldeten Quartal neu gekauft, aufgestockt, reduziert oder ganz verkauft hat. Unveränderte Positionen sind ausgeblendet."],
+  ["watchlist", "Meine Watchlist", "Zeigt nur Aktien, die auch in deiner Watchlist stehen, egal ob sich etwas geändert hat. Die Auswahl folgt automatisch deiner Watchlist, hier musst du nichts pflegen."],
+  ["top", "Größte Positionen", "Die 15 größten Positionen jedes Investors nach Wert, also worauf er am stärksten setzt."],
+];
+
 function renderInvestors() {
   if (!INV || (!INV.investoren.length && !(INV.politiker || []).length)) { $app.innerHTML = `<p>Noch keine Investoren-Daten – der nächste Lauf lädt sie.</p>`; return; }
   const filt = store.get("invFilt", "aenderungen");
@@ -854,11 +876,12 @@ function renderInvestors() {
   $app.innerHTML = `
     <h1>Große Investoren</h1>
     <p class="muted prose">Fonds mit über 100 Mio. $ müssen ihre US-Aktienpositionen quartalsweise per ${term("f13", "13F")} an die SEC melden, und zwar bis zu 45 Tage nach Quartalsende.
-      Die Daten sind also verzögert und zeigen nur US-Aktien (keine Leerverkäufe). Verglichen wird jeweils mit dem Vorquartal.</p>
+      Die Daten sind also verzögert und zeigen nur US-Aktien (keine Leerverkäufe). Verglichen wird jeweils mit dem Vorquartal.
+      Welche Investoren hier stehen, steht in <code>config/investors.json</code>. Sag Claude Bescheid, wenn du jemanden ergänzen oder entfernen willst.</p>
     <div class="toolbar">
-      ${[["aenderungen", "Nur Änderungen"], ["watchlist", "Meine Watchlist"], ["top", "Größte Positionen"]]
-        .map(([k, l]) => `<button class="chip ${k === filt ? "on" : ""}" data-f="${k}">${l}</button>`).join("")}
+      ${INV_FILTER.map(([k, l]) => `<button class="chip ${k === filt ? "on" : ""}" data-f="${k}">${l}</button>`).join("")}
     </div>
+    <p class="muted small">${(INV_FILTER.find(([k]) => k === filt) || INV_FILTER[0])[2]}</p>
     <div class="grid inv-grid">${blocks}</div>
     ${multiHolders()}
     <h2>Politiker-Trades in deiner Watchlist (letzte 90 Tage)</h2>
@@ -884,11 +907,11 @@ const LENSES = [
 const BAUSTEINE = [["wachstum", "Wachstum"], ["profit", "Marge"], ["bewertung", "Bewertung"], ["trend", "Trend"], ["bilanz", "Bilanz"]];
 
 function ideaCard(x) {
-  const addUrl = issueUrl(`Watchlist: hinzufügen ${x.symbol}`, ["aktion: hinzufuegen", `symbol: ${x.symbol}`, `name: ${x.name}`, `kategorie: ${x.kategorie}`, "typ: aktie"]);
+  const addUrl = ideeAddUrl(x);
   const b = x.bausteine || {};
   return `<article class="card idee-card">
     <div class="idee-kopf">
-      <div><h3>${x.in_watchlist ? `<a href="#/wert/${encodeURIComponent(x.symbol)}">${esc(x.name)}</a>` : esc(x.name)}
+      <div><h3><a href="#/wert/${encodeURIComponent(x.symbol)}">${esc(x.name)}</a>
         ${x.in_watchlist ? `<span class="badge watch">Watchlist</span>` : x.bekannt === false ? `<span class="badge">wenig bekannt</span>` : ""}</h3>
         <div class="sym">${esc(x.symbol)} · ${esc(x.kategorie)}${x.thema ? " · " + esc(x.thema) : ""}</div></div>
       <div class="score" title="Daten-Score von 100">${x.score == null ? "–" : x.score}</div>
@@ -908,7 +931,8 @@ function ideaCard(x) {
     ${x.these ? `<p class="small" style="margin:8px 0 0"><strong>Mögliche These:</strong> ${esc(x.these)}</p>` : ""}
     ${x.risiko ? `<p class="small" style="margin:4px 0 0"><strong>Was dagegen spricht:</strong> ${esc(x.risiko)}</p>` : ""}
     <div class="idee-links">
-      ${x.in_watchlist ? `<a class="chip" href="#/wert/${encodeURIComponent(x.symbol)}">Analyse öffnen</a>` : `<a class="chip on" href="${addUrl}" target="_blank" rel="noopener">＋ Zur Watchlist</a>`}
+      <a class="chip on" href="#/wert/${encodeURIComponent(x.symbol)}">Analyse öffnen</a>
+      ${x.in_watchlist ? "" : `<a class="chip" href="${addUrl}" target="_blank" rel="noopener">＋ Zur Watchlist</a>`}
       <a class="chip" href="https://finance.yahoo.com/quote/${encodeURIComponent(x.symbol)}" target="_blank" rel="noopener">Yahoo Finance</a>
     </div>
   </article>`;
@@ -945,7 +969,7 @@ function renderEntdecken() {
     <p class="muted small" id="entInfo"></p>
     <div class="grid idee-grid" id="entListe"></div>
     <p style="text-align:center;margin-top:14px"><button class="chip" id="entMehr" hidden>Mehr anzeigen</button></p>
-    <p class="muted small">Ein Klick auf „Zur Watchlist“ öffnet GitHub, dort nur noch „Create“ tippen. Nach 3–5 Minuten erscheint der Wert mit allen Daten in der Übersicht. Quelle der Zahlen: Yahoo Finance. Kurzbeschreibungen und Thesen: Claude, Wissen bis etwa Mitte 2026.</p>`;
+    <p class="muted small">Ein Klick auf den Namen oder „Analyse öffnen“ zeigt Kurs, Kennzahlen und Geschäftszahlen. „Zur Watchlist“ öffnet GitHub, dort nur noch „Create“ tippen. Nach 3–5 Minuten erscheint der Wert mit allen Daten in der Übersicht. Quelle der Zahlen: Yahoo Finance. Kurzbeschreibungen und Thesen: Claude, Wissen bis etwa Mitte 2026.</p>`;
   $app.querySelectorAll("[data-lens]").forEach((b) => b.addEventListener("click", () => {
     entState.lens = b.dataset.lens; store.set("entLens", entState.lens); entState.n = 24;
     $app.querySelectorAll("[data-lens]").forEach((x) => x.classList.toggle("on", x === b));
