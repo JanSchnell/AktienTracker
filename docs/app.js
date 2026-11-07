@@ -305,6 +305,13 @@ function ideenTeaser() {
 
 // ------------------------------------------------------------ Detailseite
 
+// Unternehmenswebsite aus Yahoo, angezeigt als kurze Domain
+function webLink(f) {
+  if (!f || !/^https?:\/\//i.test(f.website || "")) return "";
+  const host = f.website.replace(/^https?:\/\/(www\.)?/i, "").replace(/\/.*$/, "");
+  return `<a class="web-link small" href="${esc(f.website)}" target="_blank" rel="noopener">🌐 ${esc(host)} ↗</a>`;
+}
+
 const kv = (k, v, c = "") => `<div class="card"><div class="k">${k}</div><div class="v ${c}">${v}</div></div>`;
 
 async function renderDetail(sym) {
@@ -332,6 +339,7 @@ async function renderDetail(sym) {
       <div>
         <h1>${esc(w.langname || w.name)}</h1>
         <div class="muted">${esc(w.symbol)} · ${esc(w.kategorie)}${f && f.branche ? " · " + esc(f.branche) : ""}${f && f.land ? " · " + esc(f.land) : ""}</div>
+        ${webLink(f)}
       </div>
       <div class="head-preis">
         <div class="price">${fmt(w.kurs)} <span class="muted small">${esc(cur)}</span></div>
