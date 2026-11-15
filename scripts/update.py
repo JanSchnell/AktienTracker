@@ -132,6 +132,8 @@ def tg_hinweis(code, beschreibung):
         return "Der Bot-Token (Secret TELEGRAM_BOT_TOKEN) ist falsch."
     if "chat not found" in b:
         return "Die Chat-ID (Secret TELEGRAM_CHAT_ID) stimmt nicht, oder du hast dem Bot noch nie geschrieben."
+    if "bot can't send messages to the bot" in b:
+        return "In TELEGRAM_CHAT_ID steht die Nummer des Bots, nicht deine eigene Chat-ID."
     if "blocked" in b:
         return "Du hast den Bot in Telegram blockiert oder gelöscht."
     if "can't parse entities" in b:
