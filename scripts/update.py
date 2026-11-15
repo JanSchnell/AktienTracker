@@ -98,7 +98,7 @@ def pct(a, b):
 def scrub(msg):
     """Geheimnisse (z. B. E-Mail aus SEC_USER_AGENT) aus Fehlermeldungen entfernen – die landen öffentlich."""
     msg = str(msg)
-    for s in {_SEC_RAW, SEC_UA, TG_TOKEN, *(_SEC_RAW.split())}:
+    for s in {_SEC_RAW, SEC_UA, TG_TOKEN, TG_CHAT, *(_SEC_RAW.split())}:
         if s and len(s) > 3:
             msg = msg.replace(s, "***").replace(repr(s)[1:-1], "***")
     return re.sub(r"[\w.+-]+@[\w-]+\.[\w.]+", "***", msg)[:300]
@@ -121,22 +121,58 @@ def rsi(close, n=14):
 
 # ---------------------------------------------------------------- Telegram
 
-def telegram(text):
-    """Sendet eine Nachricht, liefert True nur bei Erfolg."""
+# Ergebnis der letzten Telegram-Abfrage, erscheint auf der Webseite neben „Stand“
+TG_STATUS = {"ok": None, "hinweis": ""}
+
+
+def tg_hinweis(code, beschreibung):
+    """Telegram-Fehler in einen verständlichen Hinweis übersetzen."""
+    b = (beschreibung or "").lower()
+    if code == 401 or code == 404:
+        return "Der Bot-Token (Secret TELEGRAM_BOT_TOKEN) ist falsch."
+    if "chat not found" in b:
+        return "Die Chat-ID (Secret TELEGRAM_CHAT_ID) stimmt nicht, oder du hast dem Bot noch nie geschrieben."
+    if "blocked" in b:
+        return "Du hast den Bot in Telegram blockiert oder gelöscht."
+    if "can't parse entities" in b:
+        return "Eine Nachricht hatte ungültige Formatierung."
+    return f"Telegram meldet: {code} {scrub(beschreibung)}"
+
+
+def tg_aufruf(methode, daten):
+    """Ruft die Telegram-API auf. Liefert True bei Erfolg und merkt sich sonst den Grund."""
     if not (TG_TOKEN and TG_CHAT):
-        print("[telegram aus]", text.replace("\n", " | "))
+        fehlt = " und ".join(n for n, v in (("TELEGRAM_BOT_TOKEN", TG_TOKEN), ("TELEGRAM_CHAT_ID", TG_CHAT)) if not v)
+        TG_STATUS.update(ok=False, hinweis=f"Telegram ist nicht eingerichtet: {fehlt} fehlt in den Secrets.")
         return False
     try:
-        r = requests.post(
-            f"https://api.telegram.org/bot{TG_TOKEN}/sendMessage",
-            json={"chat_id": TG_CHAT, "text": text, "parse_mode": "HTML", "disable_web_page_preview": True},
-            timeout=20,
-        )
-        r.raise_for_status()
-        return True
+        r = requests.post(f"https://api.telegram.org/bot{TG_TOKEN}/{methode}", json=daten, timeout=20)
+        try:
+            antwort = r.json()
+        except ValueError:
+            antwort = {}
+        if r.ok and antwort.get("ok"):
+            TG_STATUS.update(ok=True, hinweis="")
+            return True
+        TG_STATUS.update(ok=False, hinweis=tg_hinweis(r.status_code, antwort.get("description") or r.reason))
     except Exception as e:
-        print("Telegram-Fehler:", scrub(e))
-        return False
+        TG_STATUS.update(ok=False, hinweis="Telegram war nicht erreichbar: " + scrub(e))
+    print("Telegram-Fehler:", TG_STATUS["hinweis"])
+    return False
+
+
+def telegram(text):
+    """Sendet eine Nachricht, liefert True nur bei Erfolg."""
+    ok = tg_aufruf("sendMessage", {"chat_id": TG_CHAT, "text": text, "parse_mode": "HTML", "disable_web_page_preview": True})
+    if not ok and not (TG_TOKEN and TG_CHAT):
+        print("[telegram aus]", text.replace("\n", " | "))
+    return ok
+
+
+def telegram_pruefen():
+    """Prüft bei jedem Lauf ohne Nachricht, ob Token und Chat-ID funktionieren."""
+    if TG_STATUS["ok"] is None:
+        tg_aufruf("getChat", {"chat_id": TG_CHAT})
 
 
 # ---------------------------------------------------------------- Kurse & Kennzahlen
@@ -1127,12 +1163,13 @@ def main():
 
     entdecken = scan_universe(watch, rules, profiles, items)
     alarme = alarme_pruefen(items, datetime.now(timezone.utc))
-    now = datetime.now(timezone.utc).isoformat(timespec="minutes")
+    telegram_pruefen()
+    now =datetime.now(timezone.utc).isoformat(timespec="minutes")
     namen = {e["symbol"]: e["name"] for e in watch}
     for x in politik:
         x["name"] = namen.get(x["symbol"], x["symbol"])
     politik.sort(key=lambda x: (x.get("gemeldet") or "", x.get("datum") or ""), reverse=True)
-    save_json(OUT / "overview.json", {"aktualisiert": now, "regeln": rules, "werte": items, "fehler": fehler, "fx": wechselkurse(items, entdecken), "alarme": alarme,
+    save_json(OUT / "overview.json", {"aktualisiert": now, "regeln": rules, "werte": items, "fehler": fehler, "fx": wechselkurse(items, entdecken), "alarme": alarme, "telegram": TG_STATUS,
                                       "repo": os.environ.get("GITHUB_REPOSITORY") or "JanSchnell/AktienTracker"})
     save_json(OUT / "investoren.json", {"aktualisiert": now, "investoren": inv_out, "politiker": politik})
     save_json(OUT / "entdecken.json", {"aktualisiert": now, "werte": entdecken})

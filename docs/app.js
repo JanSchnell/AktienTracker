@@ -1178,7 +1178,13 @@ async function init() {
   applyBetraege();
   setupNav();
   document.getElementById("stand").textContent = "Stand: " + new Date(OV.aktualisiert).toLocaleString("de-DE", { dateStyle: "medium", timeStyle: "short" }) +
-    (OV.fehler && OV.fehler.length ? ` · ${OV.fehler.length} Werte nicht geladen: ${OV.fehler.map((f) => f.symbol).join(", ")}` : "");
+    (OV.fehler && OV.fehler.length ? ` · ${OV.fehler.length} Werte nicht geladen: ${OV.fehler.map((f) => f.symbol).join(", ")}` : "") +
+    (OV.telegram && OV.telegram.ok === false ? ` · ⚠️ Telegram geht nicht: ${OV.telegram.hinweis}` : "");
+  // Als Handy-App bleibt die Seite im Hintergrund offen. Beim Zurückkehren neu laden, sonst bleibt ein alter Stand stehen.
+  const geladen = Date.now();
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "visible" && Date.now() - geladen > 5 * 60 * 1000) location.reload();
+  });
   addEventListener("hashchange", route);
   route();
 }
