@@ -46,13 +46,14 @@ function betraege() {
   const liste = (typ) => r.stufen.map((s, i) => { const v = (eigene[typ] || [])[i]; return v != null ? v : r.grundbetrag[typ] * s.faktor; });
   return { etf: liste("etf"), aktie: liste("aktie") };
 }
+const budget = () => { const v = store.get("budget", null); return typeof v === "number" && v > 0 ? v : null; };
 const betragFuer = (w) => (w.stufe ? betraege()[w.typ === "etf" ? "etf" : "aktie"][w.stufe - 1] : 0);
 function applyBetraege() { OV.werte.forEach((w) => { w.zusatzkauf = betragFuer(w); }); }
 
 // ETFs: Stufen vom Allzeithoch, Aktien vom 52-Wochen-Hoch
 const basisName = (w) => (w.stufe_basis === "ath" ? "Allzeithoch" : "52-Wochen-Hoch");
 const basisKurz = (w) => (w.stufe_basis === "ath" ? "ATH" : "52W");
-const basisKurs = (w) => (w.stufe_basis === "ath" ? w.ath : w.hoch52);
+const basisKurs = (w) => (w.stufe_rueckgang != null && w.stufe_rueckgang < 100 ? w.kurs / (1 - w.stufe_rueckgang / 100) : w.stufe_basis === "ath" ? w.ath : w.hoch52);
 const rutschTage = () => (OV.regeln.kursrutsch || {}).handelstage || 10;
 
 function tierBadge(w) {
@@ -64,7 +65,7 @@ function tierBadge(w) {
 
 function rutschBadge(w) {
   if (!w.kursrutsch) return "";
-  return `<span class="badge sell" title="Kurs ${fmt(w.rueckgang_kurz, 1)} % unter dem höchsten Schlusskurs der letzten ${rutschTage()} Handelstage (${date(w.kurz_hoch_datum)}). Ursache prüfen, kein Kaufsignal.">▼ ${fmt(w.rueckgang_kurz, 0)} %</span>`;
+  return `<span class="badge sell" title="Kurs ${fmt(w.rueckgang_kurz, 1)} % unter dem höchsten Schlusskurs der letzten ${rutschTage()} Handelstage (${date(w.kurz_hoch_datum)}). Für diesen Wert ungewöhnlich: Hinweis ab ${fmt(w.rutsch_grenze, 0)} %. Ursache prüfen, kein Kaufsignal.">▼ ${fmt(w.rueckgang_kurz, 0)} %</span>`;
 }
 
 function destroyCharts() { charts.forEach((c) => c.destroy()); charts = []; }
@@ -178,6 +179,21 @@ function statTile(key, label, value, sub) {
     <div class="sub">${esc(sub)}</div></button>`;
 }
 
+function budgetHinweis(werte) {
+  const b = budget();
+  const signale = werte.filter((w) => w.stufe > 0);
+  const summe = signale.reduce((a, w) => a + betragFuer(w), 0);
+  if (!signale.length || !summe) return "";
+  const cur = OV.regeln.waehrung_grundbetrag || "EUR";
+  if (!b) return `<div class="note small"><strong>Kaufstufen zusammen:</strong> ${signale.length} Werte, ${fmt(summe, 0)} ${cur}. Unter <a href="#/regeln">Regeln</a> kannst du ein Monatsbudget eintragen, dann zeigt das Tool, ob es reicht.</div>`;
+  if (summe <= b) return `<div class="note small"><strong>Budget:</strong> Die ${signale.length} Kaufstufen kosten zusammen ${fmt(summe, 0)} ${cur}, dein Monatsbudget von ${fmt(b, 0)} ${cur} reicht.</div>`;
+  const beste = [...signale].sort((x, y) => ((y.screen || {}).score ?? -1) - ((x.screen || {}).score ?? -1));
+  let rest = b; const passt = [];
+  for (const w of beste) { const k = betragFuer(w); if (k <= rest) { passt.push(w.name); rest -= k; } }
+  return `<div class="note small"><strong>Budget überschritten:</strong> Die ${signale.length} Kaufstufen kosten zusammen <strong>${fmt(summe, 0)} ${cur}</strong>, dein Monatsbudget ist ${fmt(b, 0)} ${cur}.
+    Entweder auswählen (nach ${term("score", "Gesamturteil")} würden ${passt.length ? esc(passt.join(", ")) : "keine vollständig"} hineinpassen) oder alle Beträge anteilig auf ${fmt((b / summe) * 100, 0)} % kürzen.</div>`;
+}
+
 function klumpenHinweis(werte) {
   const aktien = werte.filter((w) => w.typ !== "etf");
   const top = (liste) => {
@@ -221,6 +237,7 @@ function renderOverview() {
       ${statTile("insider", "Insider-Käufe (90 Tage)", zahl("insider"), namen("insider"))}
     </div>
     ${klumpenHinweis(werte)}
+    ${budgetHinweis(werte)}
 
     <div class="toolbar filter">
       <select id="katWahl" class="${state.kat !== "Alle" ? "aktiv" : ""}" aria-label="Nach Branche filtern">
@@ -467,7 +484,7 @@ function valuationSection(w, f, cur) {
       ${kv(term("roic", "ROIC (Kapitalrendite)"), fmtRatio(f.roic, 0), cls(f.roic))}
       ${kv(term("ekr", "Eigenkapitalrendite"), fmtRatio(f.eigenkapitalrendite, 0), cls(f.eigenkapitalrendite))}
       ${kv(term("kgv_vergleich", "KGV ggü. eigener Historie"), vgl.kgv_median_hist ? `${fmt(vgl.kgv_jetzt, 1)} statt ${fmt(vgl.kgv_median_hist, 1)} <span class="small muted">${relText(vgl.verhaeltnis_hist)}, Median ${vgl.hist_von}–${vgl.hist_bis}</span>` : "–", relCls(vgl.verhaeltnis_hist))}
-      ${kv(term("kgv_vergleich", "KGV erw. ggü. Branche"), vgl.branche_median ? `${fmt(vgl.kgv_erwartet, 1)} statt ${fmt(vgl.branche_median, 1)} <span class="small muted">${relText(vgl.verhaeltnis_branche)}, ${vgl.branche_n} Werte „${esc(vgl.branche)}“</span>` : "–", relCls(vgl.verhaeltnis_branche))}
+      ${kv(term("kgv_vergleich", "KGV erw. ggü. Branche"), vgl.branche_median ? `${fmt(vgl.kgv_erwartet, 1)} statt ${fmt(vgl.branche_median, 1)} <span class="small muted">${relText(vgl.verhaeltnis_branche)}, ${vgl.branche_n} Werte ${vgl.branche_ebene === "Branche" ? "der Branche" : "des Sektors"} „${esc(vgl.branche)}“</span>` : "–", relCls(vgl.verhaeltnis_branche))}
       ${kv(term("dividende", "Dividendenrendite"), f.dividendenrendite != null ? fmt(f.dividendenrendite, 2) + " %" : "keine")}
       ${kv(term("kursziel", "Analysten-Kursziel"), f.kursziel ? `${fmt(f.kursziel)} <span class="small ${cls(f.kursziel - w.kurs)}">${fmtPct((f.kursziel / w.kurs - 1) * 100, 0)}</span> <span class="small muted">geringe Aussagekraft</span>` : "–")}
       ${kv(term("konsens", "Analysten-Konsens"), `${esc(EMPFEHLUNG[f.analysten_empfehlung] || f.analysten_empfehlung || "–")} <span class="small muted">${f.analysten_anzahl ? f.analysten_anzahl + " Analysten, " : ""}geringe Aussagekraft</span>`)}
@@ -488,12 +505,12 @@ function priceSection(w, d) {
         return `<button class="chip range" data-r="${r}"><span>${r}</span><small class="${cls(c)}">${c == null ? "–" : fmtPct(c, Math.abs(c) < 100 ? 1 : 0)}</small></button>`;
       }).join("")}</div>
       <div class="chart-box"><canvas id="cPrice"></canvas></div>
-      <p class="muted small" style="margin:8px 0 0">Gestrichelt: ${w.stufe_basis === "ath" ? "Allzeithoch" : "Allzeithoch, 52-Wochen-Hoch"} und die Kurse, bei denen deine Stufen beginnen (gerechnet vom ${basisName(w)}), soweit sie im gewählten Zeitraum liegen. Kurse älter als 2 Jahre sind Wochenkurse.</p>
+      <p class="muted small" style="margin:8px 0 0">${w.inkl_dividenden ? "Rückgänge und Wertentwicklung sind inklusive Dividenden gerechnet, der Chart zeigt den reinen Kurs. " : ""}Gestrichelt: ${w.stufe_basis === "ath" ? "Allzeithoch" : "Allzeithoch, 52-Wochen-Hoch"} und die Kurse, bei denen deine Stufen beginnen (gerechnet vom ${basisName(w)}), soweit sie im gewählten Zeitraum liegen. Kurse älter als 2 Jahre sind Wochenkurse.</p>
     </div>
     <div class="grid kv" style="margin-top:12px">
       ${kv(term("ath", "Rückgang vom Allzeithoch"), fmtPct(-w.rueckgang_ath), w.rueckgang_ath > 0.05 ? "neg" : "")}
       ${kv(term("w52", "vom 52-Wochen-Hoch"), fmtPct(-w.rueckgang_52w), w.rueckgang_52w > 0.05 ? "neg" : "")}
-      ${kv(term("rutsch", `Rückgang ${rutschTage()} Handelstage`), fmtPct(-w.rueckgang_kurz) + (w.kursrutsch ? " " + rutschBadge(w) : ""), w.rueckgang_kurz > 0.05 ? "neg" : "")}
+      ${kv(term("rutsch", `Rückgang ${rutschTage()} Handelstage`), fmtPct(-w.rueckgang_kurz) + (w.kursrutsch ? " " + rutschBadge(w) : "") + (w.rutsch_grenze ? ` <span class="small muted">ungewöhnlich ab −${fmt(w.rutsch_grenze, 0)} %</span>` : ""), w.rueckgang_kurz > 0.05 ? "neg" : "")}
       ${kv(term("ath", "Allzeithoch"), `${fmt(w.ath)} <span class="small muted">${date(w.ath_datum)}</span>`)}
       ${kv(term("stufe", `Kaufstufe (${basisKurz(w)})`), tierBadge(w) + (w.zusatzkauf ? ` <span class="small">${fmt(w.zusatzkauf, 0)} ${esc(OV.regeln.waehrung_grundbetrag)}</span>` : ""))}
       ${kv(term("stufe", "Nächste Stufe bei"), naechste ? `${fmt(kursNaechste)} <span class="small muted">(−${naechste.ab_prozent} %)</span>` : "höchste erreicht")}
@@ -893,6 +910,10 @@ function holdersOf(w) {
   return out.sort((a, b) => b.p.wert - a.p.wert);
 }
 function changeBadge(p) {
+  const split = p.split ? ` <span class="sym" title="Zwischen den Stichtagen gab es einen Aktiensplit, die Veränderung ist darum bereinigt">Split ${p.split >= 1 ? fmt(p.split, 0) + ":1" : "1:" + fmt(1 / p.split, 0)}</span>` : "";
+  return changeBadgeRoh(p) + split;
+}
+function changeBadgeRoh(p) {
   if (p.aenderung === "neu") return `<span class="badge buy">Neu</span>`;
   if (p.aenderung === "verkauft") return `<span class="badge sell">Verkauft</span>`;
   if (p.aenderung === "aufgestockt") return `<span class="badge buy">+${fmt(p.delta_stueck_pct, 0)} %</span>`;
@@ -939,7 +960,8 @@ function renderInvestors() {
       <h3>${esc(inv.name)}</h3>
       ${inv.beschreibung ? `<p class="small" style="margin:4px 0 8px">${esc(inv.beschreibung)}</p>` : ""}
       <div class="muted small">${esc(inv.person || "")} · ${term("stichtag", "Stichtag")} ${date(inv.stichtag)} · gemeldet ${date(inv.filing_datum)}
-        ${alt ? ` · <span class="neg">veraltet, keine neueren 13F</span>` : ""}</div>
+        ${inv.nur_nt_seit ? ` · <span class="neg">veraltet: meldet seit ${date(inv.nur_nt_seit)} nur noch „13F-NT“, die Positionen reicht inzwischen eine andere Gesellschaft ein</span>`
+          : alt ? ` · <span class="neg">veraltet, keine neueren 13F</span>` : ""}</div>
       <div class="small" style="margin:8px 0">Depot: <strong>${big(inv.gesamtwert)} $</strong> in ${inv.positionen.filter((p) => p.wert > 0).length} Positionen ·
         <span class="pos">${cnt("neu")} neu</span>, <span class="pos">${cnt("aufgestockt")} aufgestockt</span>,
         <span class="neg">${cnt("reduziert")} reduziert</span>, <span class="neg">${cnt("verkauft")} verkauft</span></div>
@@ -976,7 +998,7 @@ const m = (x, k) => (x.m ? x.m[k] : null);
 const LENSES = [
   { id: "alle", label: "Bestes Urteil", info: "Alle Werte, sortiert nach Gesamturteil.", test: () => true },
   { id: "qualitaet", label: "Wachstum & Qualität", info: "Umsatz wächst mindestens 10 %, operative Marge mindestens 15 %.", test: (x) => m(x, "umsatzwachstum") >= 10 && m(x, "op_marge") >= 15 },
-  { id: "ruecksetzer", label: "Gute Zahlen, gefallener Kurs", info: "Mindestens 20 % unter dem Allzeithoch, aber Umsatz wächst mindestens 5 % und das Geschäft ist profitabel. Der Kurs kann trotzdem einen guten Grund haben.", test: (x) => x.rueckgang_ath >= 20 && m(x, "umsatzwachstum") >= 5 && m(x, "op_marge") > 0 },
+  { id: "ruecksetzer", label: "Gute Zahlen, gefallener Kurs", info: "Mindestens 20 % unter dem 52-Wochen-Hoch, aber Umsatz wächst mindestens 5 % und das Geschäft ist profitabel. Der Kurs kann trotzdem einen guten Grund haben.", test: (x) => (x.rueckgang_52w ?? x.rueckgang_ath) >= 20 && m(x, "umsatzwachstum") >= 5 && m(x, "op_marge") > 0 },
   { id: "guenstig", label: "Günstig bewertet", info: "Erwartetes KGV bis 20 oder PEG bis 1,2, dazu Umsatz nicht schrumpfend.", test: (x) => m(x, "umsatzwachstum") >= 0 && ((m(x, "kgv_erwartet") > 0 && m(x, "kgv_erwartet") <= 20) || (m(x, "peg") > 0 && m(x, "peg") <= 1.2)) },
   { id: "trend", label: "Läuft aktuell gut", info: "Über 200-Tage-Linie und mindestens 15 % Plus in 6 Monaten, nicht sehr heiß gelaufen.", test: (x) => x.abstand_sma200 > 0 && x.perf_6m >= 15 && x.heiss !== 2 },
   { id: "dividende", label: "Dividende", info: "Dividendenrendite mindestens 2,5 %, profitables Geschäft.", test: (x) => m(x, "dividende") >= 2.5 && m(x, "op_marge") > 0 },
@@ -1001,7 +1023,7 @@ function ideaCard(x) {
       <span>Umsatz <b class="${cls(m(x, "umsatzwachstum"))}">${fmtPct(m(x, "umsatzwachstum"), 0)}</b></span>
       <span>Op. Marge <b>${m(x, "op_marge") == null ? "–" : fmt(m(x, "op_marge"), 0) + " %"}</b></span>
       <span>KGV erw. <b>${fmt(m(x, "kgv_erwartet"), 1)}</b></span>
-      <span>vom ATH <b class="neg">${fmtPct(-x.rueckgang_ath, 0)}</b></span>
+      <span>vom 52W-Hoch <b class="neg">${fmtPct(-(x.rueckgang_52w ?? x.rueckgang_ath), 0)}</b></span>
       <span>6 Mon. <b class="${cls(x.perf_6m)}">${fmtPct(x.perf_6m, 0)}</b></span>
       <span>ROIC <b>${m(x, "roic") == null ? "–" : fmt(m(x, "roic"), 0) + " %"}</b></span>
     </div>
@@ -1101,6 +1123,7 @@ function renderRules() {
         <td><input class="betrag" inputmode="decimal" data-typ="etf" data-i="${i}" value="${b.etf[i]}" aria-label="${esc(s.name)} Betrag ETF"></td>
         <td><input class="betrag" inputmode="decimal" data-typ="aktie" data-i="${i}" value="${b.aktie[i]}" aria-label="${esc(s.name)} Betrag Aktie"></td></tr>`).join("")}</tbody>
     </table></div>
+    <div class="form" style="margin:12px 0"><label>Monatsbudget für Zusatzkäufe (${cur}, optional)<input id="budget" inputmode="decimal" placeholder="z. B. 500" value="${budget() ?? ""}"></label></div>
     <p class="small" id="betragSumme"></p>
     <details class="card"><summary>Alle Stufen schnell aus einem Grundbetrag berechnen</summary>
       <p class="small">Trage den Betrag für Stufe 1 ein. Die höheren Stufen werden damit vervielfacht (${r.stufen.map((s) => s.faktor + "×").join(", ")}).</p>
@@ -1159,8 +1182,16 @@ function renderRules() {
   </div>`;
   const summe = () => {
     const betroffen = sichtbar().filter((w) => w.stufe > 0);
-    document.getElementById("betragSumme").innerHTML = `Aktuell stehen <strong>${betroffen.length} Werte</strong> in einer Stufe. Würdest du überall deinen Betrag einsetzen, wären das <strong>${fmt(betroffen.reduce((a, w) => a + betragFuer(w), 0), 0)} ${cur}</strong>. Das soll zeigen, wie weit dein freies Geld reicht. Es ist kein Vorschlag, alles zu kaufen.`;
+    const gesamt = betroffen.reduce((a, w) => a + betragFuer(w), 0), b = budget();
+    document.getElementById("betragSumme").innerHTML = `Aktuell stehen <strong>${betroffen.length} Werte</strong> in einer Stufe. Würdest du überall deinen Betrag einsetzen, wären das <strong>${fmt(gesamt, 0)} ${cur}</strong>${b ? (gesamt > b ? `, also mehr als dein Budget von ${fmt(b, 0)} ${cur}` : `, das passt in dein Budget von ${fmt(b, 0)} ${cur}`) : ""}. Das soll zeigen, wie weit dein freies Geld reicht. Es ist kein Vorschlag, alles zu kaufen.`;
   };
+  document.getElementById("budget").addEventListener("input", (e) => {
+    const v = zahl(e.target.value);
+    if (e.target.value.trim() === "") store.set("budget", null);
+    else if (v != null && v >= 0) store.set("budget", v);
+    else return;
+    summe();
+  });
   $app.querySelectorAll(".betrag").forEach((f) => f.addEventListener("input", () => {
     const akt = betraege();
     const v = zahl(f.value);
@@ -1251,6 +1282,7 @@ async function init() {
   setupNav();
   document.getElementById("stand").textContent = "Stand: " + new Date(OV.aktualisiert).toLocaleString("de-DE", { dateStyle: "medium", timeStyle: "short" }) +
     (OV.fehler && OV.fehler.length ? ` · ${OV.fehler.length} Werte nicht geladen: ${OV.fehler.map((f) => f.symbol).join(", ")}` : "") +
+    (OV.speicherfehler ? " · ⚠️ Zustand konnte nicht gespeichert werden, Meldungen können doppelt kommen" : "") +
     (OV.telegram && OV.telegram.ok === false ? ` · ⚠️ Telegram geht nicht: ${OV.telegram.hinweis}` : "");
   // Als Handy-App bleibt die Seite im Hintergrund offen. Beim Zurückkehren neu laden, sonst bleibt ein alter Stand stehen.
   const geladen = Date.now();

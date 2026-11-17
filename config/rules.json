@@ -12,8 +12,8 @@
     { "ab_prozent": 40, "faktor": 4, "name": "Stufe 4" },
     { "ab_prozent": 50, "faktor": 5, "name": "Stufe 5" }
   ],
-  "_hinweis_kursrutsch": "Nur Hinweis in der App, kein Telegram: Kurs mindestens so viele Prozent unter dem höchsten Schlusskurs der letzten 'handelstage' Handelstage.",
-  "kursrutsch": { "handelstage": 10, "aktie": 10, "etf": 5 },
+  "_hinweis_kursrutsch": "Nur Hinweis in der App, kein Telegram. Rückgang vom höchsten Schlusskurs der letzten 'handelstage' Handelstage, der für diesen Wert ungewöhnlich ist: größer als 'perzentil' % aller solchen Rückgänge der letzten 'jahre' Jahre, mindestens aber 'mindestens' Prozent.",
+  "kursrutsch": { "handelstage": 10, "perzentil": 95, "jahre": 2, "mindestens": { "aktie": 8, "etf": 4 } },
   "_hinweis_ueberhitzung": "Hinweis (kein Verkaufssignal!), wenn ein Wert weit über seiner 200-Tage-Linie liegt oder der RSI(14) sehr hoch ist. Werte in Prozent Abstand zur 200-Tage-Linie: [heiß, sehr heiß].",
   "ueberhitzung": {
     "aktie": { "abstand_sma200": [30, 50] },

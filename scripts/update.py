@@ -181,6 +181,36 @@ def telegram_pruefen():
 
 # ---------------------------------------------------------------- Kurse & Kennzahlen
 
+def lade_historie(t):
+    """Yahoo liefert gelegentlich kurz nichts (Überlastung). Dann zweimal mit Pause erneut versuchen."""
+    for versuch in range(3):
+        try:
+            hist = t.history(period="max", auto_adjust=False)
+            if hist is not None and not hist.empty and hist["Close"].notna().any():
+                return hist
+        except Exception:
+            pass
+        if versuch < 2:
+            time.sleep(4 * (versuch + 1))
+    raise RuntimeError("keine Kursdaten (3 Versuche)")
+
+
+def gesamtrendite_reihe(hist):
+    """Schlusskurse inklusive Dividenden (Yahoo „Adj Close“), damit eine Ausschüttung nicht wie ein Kursverlust aussieht.
+    Fällt auf die normalen Schlusskurse zurück, wenn die Reihe fehlt oder unplausibel ist."""
+    close = hist["Close"].dropna()
+    if "Adj Close" not in hist:
+        return close, False
+    adj = hist["Adj Close"].reindex(close.index)
+    if adj.isna().any() or (adj <= 0).any():
+        return close, False
+    r = adj / close
+    # Faktor muss zwischen 0 und 1 liegen und zum heutigen Tag auf 1 zulaufen
+    if not (abs(float(r.iloc[-1]) - 1) < 0.01 and float(r.min()) > 0 and float(r.max()) < 1.01):
+        return close, False
+    return adj, True
+
+
 def price_block(hist, rules):
     close = hist["Close"].dropna()
     last = float(close.iloc[-1])
@@ -192,15 +222,25 @@ def price_block(hist, rules):
     sma200 = float(close.iloc[-200:].mean()) if len(close) >= 200 else None
     prev = float(close.iloc[-2]) if len(close) > 1 else None
 
+    # Rückgänge und Wertentwicklung inklusive Dividenden
+    tr, inkl_div = gesamtrendite_reihe(hist)
+    tr_last = float(tr.iloc[-1])
+    tr_year = tr[tr.index >= last_date - pd.Timedelta(days=365)]
+
     def back(days):
-        s = close[close.index <= last_date - pd.Timedelta(days=days)]
+        s = tr[tr.index <= last_date - pd.Timedelta(days=days)]
         return float(s.iloc[-1]) if len(s) else None
 
-    ytd = close[close.index.year < last_date.year]
-    drawdown = (1 - last / ath) * 100
+    ytd = tr[tr.index.year < last_date.year]
+    drawdown = (1 - tr_last / float(tr.max())) * 100
     # Kurzfristiger Rückgang: vom höchsten Schlusskurs der letzten N Handelstage
-    n = (rules.get("kursrutsch") or {}).get("handelstage", 10)
-    kurz = close.iloc[-n:]
+    k = rules.get("kursrutsch") or {}
+    n = k.get("handelstage", 10)
+    kurz = tr.iloc[-n:]
+    # Was ist für diesen Wert ein üblicher kurzer Rückgang? Perzentil der letzten Jahre
+    fenster = tr.iloc[-int(252 * k.get("jahre", 2)):]
+    dd = (1 - fenster / fenster.rolling(n, min_periods=n).max()).dropna() * 100
+    typisch = float(dd.quantile(k.get("perzentil", 95) / 100)) if len(dd) >= 120 else None
     return {
         "rsi": rsi(close),
         "kurs": last,
@@ -210,19 +250,21 @@ def price_block(hist, rules):
         "ath_datum": ath_date.strftime("%Y-%m-%d"),
         "rueckgang_ath": drawdown,
         "hoch52": high52,
-        "rueckgang_52w": (1 - last / high52) * 100,
-        "rueckgang_kurz": (1 - last / float(kurz.max())) * 100,
+        "rueckgang_52w": (1 - tr_last / float(tr_year.max())) * 100,
+        "rueckgang_kurz": (1 - tr_last / float(kurz.max())) * 100,
+        "rutsch_typisch": typisch,
+        "inkl_dividenden": inkl_div,
         "kurz_hoch_datum": kurz.idxmax().strftime("%Y-%m-%d"),
         "tief52": float(year.min()),
         "sma200": sma200,
         "abstand_sma200": pct(last, sma200),
-        "perf_1w": pct(last, back(7)),
-        "perf_1m": pct(last, back(30)),
-        "perf_3m": pct(last, back(91)),
-        "perf_6m": pct(last, back(182)),
-        "perf_1j": pct(last, back(365)),
-        "perf_5j": pct(last, back(5 * 365)),
-        "perf_ytd": pct(last, float(ytd.iloc[-1])) if len(ytd) else None,
+        "perf_1w": pct(tr_last, back(7)),
+        "perf_1m": pct(tr_last, back(30)),
+        "perf_3m": pct(tr_last, back(91)),
+        "perf_6m": pct(tr_last, back(182)),
+        "perf_1j": pct(tr_last, back(365)),
+        "perf_5j": pct(tr_last, back(5 * 365)),
+        "perf_ytd": pct(tr_last, float(ytd.iloc[-1])) if len(ytd) else None,
         "tag_tief": clean(hist["Low"].dropna().iloc[-1]) if "Low" in hist else None,
         "tag_hoch": clean(hist["High"].dropna().iloc[-1]) if "High" in hist else None,
     }
@@ -365,10 +407,13 @@ def bewertungs_vergleich(f, info):
         m = median([x["kgv"] for x in hist])
         out |= {"kgv_jetzt": jetzt, "kgv_median_hist": m, "verhaeltnis_hist": jetzt / m,
                 "hist_von": hist[0]["jahr"], "hist_bis": hist[-1]["jahr"]}
-    fpe, sektor = clean(info.get("forwardPE")), info.get("sector")
-    b = BRANCHEN_KGV.get(sektor) or {}
-    if fpe and fpe > 0 and b.get("median") and sektor != "Financial Services":
-        out |= {"kgv_erwartet": fpe, "branche": sektor, "branche_median": b["median"], "branche_n": b["n"],
+    fpe, sektor, branche = clean(info.get("forwardPE")), info.get("sector"), info.get("industry")
+    # Möglichst eng vergleichen (z. B. „Semiconductors“ statt „Technology“), bei zu wenigen Werten den Sektor
+    b, name, ebene = (BRANCHEN_KGV.get("branche") or {}).get(branche), branche, "Branche"
+    if not b:
+        b, name, ebene = (BRANCHEN_KGV.get("sektor") or {}).get(sektor), sektor, "Sektor"
+    if fpe and fpe > 0 and b and b.get("median") and sektor != "Financial Services":
+        out |= {"kgv_erwartet": fpe, "branche": name, "branche_ebene": ebene, "branche_median": b["median"], "branche_n": b["n"],
                 "verhaeltnis_branche": fpe / b["median"]}
     return out or None
 
@@ -878,9 +923,12 @@ def kaufstufe(typ, p, f, rules):
 
 
 def kursrutsch(typ, p, rules):
+    """Ungewöhnlich starker Rückgang für genau diesen Wert: über dem üblichen kurzen Rückgang der letzten Jahre
+    (Perzentil, siehe rules.json), mindestens aber die feste Untergrenze. Liefert (ja/nein, Grenze)."""
     k = rules.get("kursrutsch") or {}
-    grenze = k.get("etf" if typ == "etf" else "aktie")
-    return grenze is not None and p.get("rueckgang_kurz", 0) >= grenze
+    minimum = (k.get("mindestens") or {}).get("etf" if typ == "etf" else "aktie", 5 if typ == "etf" else 10)
+    grenze = max(minimum, p.get("rutsch_typisch") or 0)
+    return p.get("rueckgang_kurz", 0) >= grenze, grenze
 
 
 def kern_item(entry, info, p, f, heiss, rules):
@@ -888,6 +936,7 @@ def kern_item(entry, info, p, f, heiss, rules):
     stufen = rules["stufen"]
     typ = entry.get("typ")
     st = kaufstufe(typ, p, f, rules)
+    rutsch = kursrutsch(typ, p, rules)
     grund = rules["grundbetrag"].get(typ, 0)
     faktor = stufen[st["stufe"] - 1]["faktor"] if st["stufe"] else 0
     f = f or {}
@@ -897,7 +946,8 @@ def kern_item(entry, info, p, f, heiss, rules):
         "waehrung": info.get("currency"),
         **p,
         **st,
-        "kursrutsch": kursrutsch(typ, p, rules),
+        "kursrutsch": rutsch[0],
+        "rutsch_grenze": rutsch[1],
         "zusatzkauf": grund * faktor,
         "naechste_stufe": next((s["ab_prozent"] for s in stufen if s["ab_prozent"] > st["stufe_rueckgang"]), None),
         "ampel": f.get("ampel"),
@@ -950,9 +1000,7 @@ def scan_universe(watch, rules, profiles, items):
             continue
         try:
             t = yf.Ticker(e["symbol"])
-            hist = t.history(period="max", auto_adjust=False)
-            if hist is None or hist.empty:
-                raise RuntimeError("keine Kursdaten")
+            hist = lade_historie(t)
             p = price_block(hist, rules)
             info = t.info or {}
             f = idee_kennzahlen(e, t, hist, info)
@@ -972,9 +1020,7 @@ def process_ticker(entry, rules, state, meldungen, profiles, politik):
     tg_name = html.escape(entry["name"])
     meldungen_start = len(meldungen)
     t = yf.Ticker(sym)
-    hist = t.history(period="max", auto_adjust=False)
-    if hist is None or hist.empty:
-        raise RuntimeError("keine Kursdaten")
+    hist = lade_historie(t)
     p = price_block(hist, rules)
     try:
         info = t.info or {}
@@ -1225,38 +1271,97 @@ def parse_13f_table(cik, acc):
     return pos
 
 
+def amendment_typ(cik, acc):
+    """„RESTATEMENT“ (ersetzt die Meldung) oder „NEW HOLDINGS“ (ergänzt Positionen, z. B. nach erlaubter Geheimhaltung)."""
+    folder = f"https://www.sec.gov/Archives/edgar/data/{int(cik)}/{acc.replace('-', '')}"
+    idx = sec_get(f"{folder}/index.json")
+    prim = [i["name"] for i in idx["directory"]["item"] if "primary_doc" in i["name"].lower() and i["name"].lower().endswith(".xml")]
+    if not prim:
+        return None
+    root = ET.fromstring(sec_get(f"{folder}/{prim[0]}", as_json=False))
+    el = next((e for e in root.iter() if e.tag.split("}")[-1] == "amendmentType"), None)
+    return (el.text or "").strip().upper() if el is not None else None
+
+
+def quartal_positionen(cik, meldungen_q):
+    """Positionen eines Stichtags: ursprüngliche Meldung plus spätere Korrekturen (13F-HR/A), in Meldereihenfolge."""
+    pos = {}
+    for form, acc in meldungen_q:
+        if form == "13F-HR":
+            pos = parse_13f_table(cik, acc)
+            continue
+        typ = amendment_typ(cik, acc)
+        teil = parse_13f_table(cik, acc)
+        if typ and "RESTATEMENT" in typ:
+            pos = teil
+        else:
+            for cusip, x in teil.items():
+                e = pos.setdefault(cusip, {**x, "wert": 0, "stueck": 0})
+                e["wert"] += x["wert"]
+                e["stueck"] += x["stueck"]
+    return pos
+
+
+SPLIT_FAKTOREN = (2, 3, 4, 5, 8, 10, 15, 20, 25, 30, 40, 50)
+
+
+def split_faktor(n, a):
+    """Erkennt einen Aktiensplit zwischen zwei Stichtagen: Stückzahl genau ein glattes Vielfaches (±2 %),
+    der Preis je Aktie fällt fast im selben Verhältnis (±25 %). Nur Splits, keine Zusammenlegungen,
+    sonst würde ein halbierter Bestand bei steigendem Kurs fälschlich als Split gelten. Sonst 1."""
+    if not (n["stueck"] and a["stueck"] and n["wert"] and a["wert"]):
+        return 1
+    r = n["stueck"] / a["stueck"]
+    preis = (n["wert"] / n["stueck"]) / (a["wert"] / a["stueck"])
+    for k in SPLIT_FAKTOREN:
+        if abs(r / k - 1) < 0.02 and 0.8 < preis * k < 1.25:
+            return k
+    return 1
+
+
 def investor_holdings(inv, state, meldungen):
     cik = str(inv["cik"]).zfill(10)
     sub = sec_get(f"https://data.sec.gov/submissions/CIK{cik}.json")
     r = sub["filings"]["recent"]
-    filings = [(r["accessionNumber"][i], r["filingDate"][i], r["reportDate"][i])
-               for i in range(len(r["form"])) if r["form"][i] == "13F-HR"]
+    # Neueste zuerst. Korrekturen (13F-HR/A) gehören zum Stichtag ihrer ursprünglichen Meldung.
+    alle = [(r["form"][i], r["accessionNumber"][i], r["filingDate"][i], r["reportDate"][i])
+            for i in range(len(r["form"])) if r["form"][i] in ("13F-HR", "13F-HR/A")]
+    filings = [(acc, fdat, rdat) for form, acc, fdat, rdat in alle if form == "13F-HR"]
     if len(filings) < 1:
         raise RuntimeError("keine 13F-HR-Filings")
     (acc_neu, fdat, rdat) = filings[0]
+    # 13F-NT nach der letzten eigenen Meldung: Die Positionen meldet inzwischen eine andere Gesellschaft
+    nt = [r["filingDate"][i] for i in range(len(r["form"])) if r["form"][i] == "13F-NT" and r["filingDate"][i] > fdat]
+    nur_nt_seit = min(nt) if nt else None
+    stichtage = [rdat] + ([filings[1][2]] if len(filings) > 1 else [])
+    je_stichtag = {d: [(form, acc) for form, acc, _, rd in reversed(alle) if rd == d] for d in stichtage}
+    schluessel = ";".join(acc for d in stichtage for _, acc in je_stichtag[d])
     cache = state.setdefault("13f_cache", {})
     cached = cache.get(cik)
-    if cached and cached.get("acc") == acc_neu:
-        return cached["ergebnis"]
+    if cached and cached.get("acc") == schluessel:
+        return {**cached["ergebnis"], "nur_nt_seit": nur_nt_seit}
 
-    neu = parse_13f_table(cik, acc_neu)
-    alt = parse_13f_table(cik, filings[1][0]) if len(filings) > 1 else {}
+    neu = quartal_positionen(cik, je_stichtag[rdat])
+    alt = quartal_positionen(cik, je_stichtag[stichtage[1]]) if len(stichtage) > 1 else {}
     gesamt = sum(x["wert"] for x in neu.values()) or 1
     pos = []
     for cusip in set(neu) | set(alt):
         n, a = neu.get(cusip), alt.get(cusip)
+        sf = 1
         if n and not a:
             aenderung, delta = "neu", None
         elif a and not n:
             aenderung, delta = "verkauft", -100.0
         else:
-            delta = pct(n["stueck"], a["stueck"])
+            sf = split_faktor(n, a)
+            delta = pct(n["stueck"], a["stueck"] * sf)
             aenderung = "aufgestockt" if delta and delta > 0.5 else "reduziert" if delta and delta < -0.5 else "unveraendert"
         src = n or a
         pos.append({
             "name": src["name"], "cusip": cusip, "aenderung": aenderung, "delta_stueck_pct": delta,
             "wert": n["wert"] if n else 0, "anteil": (n["wert"] / gesamt * 100) if n else 0,
             "stueck": n["stueck"] if n else 0, "stueck_vorher": a["stueck"] if a else 0,
+            "split": (sf if n and a and sf != 1 else None),
         })
     pos.sort(key=lambda x: (-x["wert"], x["name"]))
     ergebnis = {
@@ -1265,7 +1370,7 @@ def investor_holdings(inv, state, meldungen):
         "gesamtwert": gesamt, "positionen": pos,
         "link": f"https://www.sec.gov/cgi-bin/browse-edgar?action=getcompany&CIK={cik}&type=13F-HR",
     }
-    if cached and state.get("initialisiert"):
+    if cached and state.get("initialisiert") and (cached.get("ergebnis") or {}).get("stichtag") != rdat:
         # Lange Depots kurz halten: je Art nur wenige Namen
         kurz = []
         for titel, art in (("neu", "neu"), ("komplett verkauft", "verkauft")):
@@ -1273,20 +1378,23 @@ def investor_holdings(inv, state, meldungen):
             if namen:
                 kurz.append(f"{titel} {', '.join(namen[:4])}" + (f" +{len(namen) - 4}" if len(namen) > 4 else ""))
         meldungen.append({"art": "13f", "text": f"{html.escape(inv['name'])} (Stichtag {rdat}): " + ("; ".join(kurz) or "nur Änderungen an bestehenden Positionen")})
-    cache[cik] = {"acc": acc_neu, "ergebnis": ergebnis}
-    return ergebnis
+    cache[cik] = {"acc": schluessel, "ergebnis": ergebnis}
+    return {**ergebnis, "nur_nt_seit": nur_nt_seit}
 
 
 # ---------------------------------------------------------------- Hauptprogramm
 
 def branchen_kgv(entdecken):
-    """Median des erwarteten KGV je Sektor über Watchlist und Entdecken (mindestens 4 Werte)."""
-    gruppen = {}
-    for x in entdecken:
-        k = (x.get("m") or {}).get("kgv_erwartet")
-        if x.get("sektor") and k and 0 < k < 200:
-            gruppen.setdefault(x["sektor"], []).append(k)
-    return {s: {"median": median(v), "n": len(v)} for s, v in gruppen.items() if len(v) >= 4}
+    """Median des erwarteten KGV je Branche (Industry) und je Sektor über Watchlist und Entdecken (mindestens 4 Werte)."""
+    out = {}
+    for ebene, feld in (("branche", "branche"), ("sektor", "sektor")):
+        gruppen = {}
+        for x in entdecken:
+            k = (x.get("m") or {}).get("kgv_erwartet")
+            if x.get(feld) and k and 0 < k < 200:
+                gruppen.setdefault(x[feld], []).append(k)
+        out[ebene] = {s: {"median": median(v), "n": len(v)} for s, v in gruppen.items() if len(v) >= 4}
+    return out
 
 
 def main():
@@ -1296,7 +1404,9 @@ def main():
     state = load_json(STATE_FILE, {}) or {}
     profiles = load_profiles()
     BRANCHEN_KGV.clear()
-    BRANCHEN_KGV.update(state.get("branchen_kgv") or {})
+    alt = state.get("branchen_kgv") or {}
+    # Älteres Format: nur Sektoren
+    BRANCHEN_KGV.update(alt if "sektor" in alt else {"sektor": alt, "branche": {}})
     meldungen, fehler, items, politik = [], [], [], []
     # Frühere Alarm-Stände ablösen: die Stufen dienen einmalig als Vergleich für den ersten Bericht
     alte_stufen = state.pop("stufen", None)
