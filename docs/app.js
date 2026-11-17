@@ -234,7 +234,6 @@ function renderOverview() {
       ${statTile("ath", "Nahe Allzeithoch (&lt; 3 %)", zahl("ath"), namen("ath"))}
       ${statTile("heiss", "Heiß gelaufen 🔥", zahl("heiss"), namen("heiss"))}
       ${statTile("zahlen", "Quartalszahlen in 14 Tagen", zahl("zahlen"), namen("zahlen"))}
-      ${statTile("insider", "Insider-Käufe (90 Tage)", zahl("insider"), namen("insider"))}
     </div>
     ${klumpenHinweis(werte)}
     ${budgetHinweis(werte)}
