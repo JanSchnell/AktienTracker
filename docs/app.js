@@ -363,6 +363,21 @@ function webLink(f) {
   return `<a class="web-link small" href="${esc(f.website)}" target="_blank" rel="noopener">🌐 ${esc(host)} ↗</a>`;
 }
 
+// Kachel-Raster ohne Lücke in der letzten Reihe: Fehlt eine Kachel, wird die letzte entsprechend breiter
+function rasterAuffuellen() {
+  $app.querySelectorAll(".grid").forEach((g) => {
+    const kids = [...g.children].filter((c) => !c.hidden && getComputedStyle(c).display !== "none");
+    kids.forEach((c) => { c.style.gridColumn = ""; });
+    const spalten = getComputedStyle(g).gridTemplateColumns.split(" ").filter(Boolean).length;
+    const rest = kids.length % spalten;
+    if (spalten > 1 && rest) kids[kids.length - 1].style.gridColumn = `span ${spalten - rest + 1}`;
+  });
+}
+let rasterGeplant = false;
+const rasterPlanen = () => { if (rasterGeplant) return; rasterGeplant = true; setTimeout(() => { rasterGeplant = false; rasterAuffuellen(); }, 0); };
+new MutationObserver(rasterPlanen).observe($app, { childList: true, subtree: true });
+window.addEventListener("resize", rasterPlanen);
+
 const kv = (k, v, c = "") => `<div class="card"><div class="k">${k}</div><div class="v ${c}">${v}</div></div>`;
 
 async function renderDetail(sym) {
@@ -476,8 +491,7 @@ function valuationSection(w, f, cur) {
       ${kv(term("peg", "PEG"), fmt(f.peg, 2))}
       ${kv(term("kuv", "KUV"), fmt(f.kuv, 1))}
       ${kv(term("fcf_rendite", "Free-Cashflow-Rendite"), fcfR == null ? "–" : fmt(fcfR, 1) + " %", cls(fcfR))}
-      ${kv(term("jj", "Umsatzwachstum (ggü. Vorjahr)"), fmtRatio(f.umsatzwachstum), cls(f.umsatzwachstum))}
-      ${kv(term("gewinnwachstum", "Gewinnwachstum (ggü. Vorjahr)"), fmtRatio(f.gewinnwachstum), cls(f.gewinnwachstum))}
+      ${kv(`${term("jj", "Umsatz")} / ${term("gewinnwachstum", "Gewinn")} ggü. Vorjahr`, `<span class="${cls(f.umsatzwachstum)}">${fmtRatio(f.umsatzwachstum)}</span> / <span class="${cls(f.gewinnwachstum)}">${fmtRatio(f.gewinnwachstum)}</span>`)}
       ${kv(term("bruttomarge", "Bruttomarge"), fmtRatio(f.bruttomarge, 0))}
       ${kv(term("op_marge", "Operative Marge"), fmtRatio(f.operative_marge, 0), cls(f.operative_marge))}
       ${kv(term("roic", "ROIC (Kapitalrendite)"), fmtRatio(f.roic, 0), cls(f.roic))}
@@ -485,10 +499,8 @@ function valuationSection(w, f, cur) {
       ${kv(term("kgv_vergleich", "KGV ggü. eigener Historie"), vgl.kgv_median_hist ? `${fmt(vgl.kgv_jetzt, 1)} statt ${fmt(vgl.kgv_median_hist, 1)} <span class="small muted">${relText(vgl.verhaeltnis_hist)}, Median ${vgl.hist_von}–${vgl.hist_bis}</span>` : "–", relCls(vgl.verhaeltnis_hist))}
       ${kv(term("kgv_vergleich", "KGV erw. ggü. Branche"), vgl.branche_median ? `${fmt(vgl.kgv_erwartet, 1)} statt ${fmt(vgl.branche_median, 1)} <span class="small muted">${relText(vgl.verhaeltnis_branche)}, ${vgl.branche_n} Werte ${vgl.branche_ebene === "Branche" ? "der Branche" : "des Sektors"} „${esc(vgl.branche)}“</span>` : "–", relCls(vgl.verhaeltnis_branche))}
       ${kv(term("dividende", "Dividendenrendite"), f.dividendenrendite != null ? fmt(f.dividendenrendite, 2) + " %" : "keine")}
-      ${kv(term("kursziel", "Analysten-Kursziel"), f.kursziel ? `${fmt(f.kursziel)} <span class="small ${cls(f.kursziel - w.kurs)}">${fmtPct((f.kursziel / w.kurs - 1) * 100, 0)}</span> <span class="small muted">geringe Aussagekraft</span>` : "–")}
-      ${kv(term("konsens", "Analysten-Konsens"), `${esc(EMPFEHLUNG[f.analysten_empfehlung] || f.analysten_empfehlung || "–")} <span class="small muted">${f.analysten_anzahl ? f.analysten_anzahl + " Analysten, " : ""}geringe Aussagekraft</span>`)}
-      ${kv(f.berichtsrhythmus ? "Nächste Zahlen" : "Nächste Quartalszahlen", zTage != null && zTage >= 0 ? (f.naechste_zahlen_geschaetzt ? "ca. " : "") + date(f.naechste_zahlen) + ` <span class="small muted">in ${zTage} T.${f.naechste_zahlen_geschaetzt ? ", geschätzt" : ""}</span>` : "noch offen")}
-      ${kv(term("eps", "Erwarteter EPS, nächstes Quartal"), f.erwartung_eps ? `${fmt(f.erwartung_eps)} <span class="small muted">${esc(cur)}</span>` : "–")}
+      ${kv(`${term("konsens", "Analysten")} <span class="muted">(geringe Aussagekraft)</span>`, `${esc(EMPFEHLUNG[f.analysten_empfehlung] || f.analysten_empfehlung || "–")}${f.kursziel ? ` <span class="small">· ${term("kursziel", "Ziel")} ${fmt(f.kursziel)} <span class="${cls(f.kursziel - w.kurs)}">${fmtPct((f.kursziel / w.kurs - 1) * 100, 0)}</span></span>` : ""} <span class="small muted">${f.analysten_anzahl ? f.analysten_anzahl + " Analysten" : ""}</span>`)}
+      ${kv(f.berichtsrhythmus ? "Nächste Zahlen" : "Nächste Quartalszahlen", zTage != null && zTage >= 0 ? (f.naechste_zahlen_geschaetzt ? "ca. " : "") + date(f.naechste_zahlen) + ` <span class="small muted">in ${zTage} T.${f.naechste_zahlen_geschaetzt ? ", geschätzt" : ""}${f.erwartung_eps ? `, erwarteter ${term("eps", "EPS")} ${fmt(f.erwartung_eps)} ${esc(cur)}` : ""}</span>` : "noch offen")}
     </div>
     <p class="muted small">Tipp: Blaue, unterstrichene Begriffe antippen, dann erscheint eine kurze Erklärung. Alle Begriffe stehen im <a href="#/lexikon">Lexikon</a>.
       ${f.erwartung_umsatz ? `Erwarteter Umsatz im nächsten Quartal: ${big(f.erwartung_umsatz)} ${esc(cur)}.` : ""}</p>`;
@@ -507,10 +519,9 @@ function priceSection(w, d) {
       <p class="muted small" style="margin:8px 0 0">${w.inkl_dividenden ? "Rückgänge und Wertentwicklung sind inklusive Dividenden gerechnet, der Chart zeigt den reinen Kurs. " : ""}Gestrichelt: ${w.stufe_basis === "ath" ? "Allzeithoch" : "Allzeithoch, 52-Wochen-Hoch"} und die Kurse, bei denen deine Stufen beginnen (gerechnet vom ${basisName(w)}), soweit sie im gewählten Zeitraum liegen. Kurse älter als 2 Jahre sind Wochenkurse.</p>
     </div>
     <div class="grid kv" style="margin-top:12px">
-      ${kv(term("ath", "Rückgang vom Allzeithoch"), fmtPct(-w.rueckgang_ath), w.rueckgang_ath > 0.05 ? "neg" : "")}
       ${kv(term("w52", "vom 52-Wochen-Hoch"), fmtPct(-w.rueckgang_52w), w.rueckgang_52w > 0.05 ? "neg" : "")}
       ${kv(term("rutsch", `Rückgang ${rutschTage()} Handelstage`), fmtPct(-w.rueckgang_kurz) + (w.kursrutsch ? " " + rutschBadge(w) : "") + (w.rutsch_grenze ? ` <span class="small muted">ungewöhnlich ab −${fmt(w.rutsch_grenze, 0)} %</span>` : ""), w.rueckgang_kurz > 0.05 ? "neg" : "")}
-      ${kv(term("ath", "Allzeithoch"), `${fmt(w.ath)} <span class="small muted">${date(w.ath_datum)}</span>`)}
+      ${kv(term("ath", "vom Allzeithoch"), `<span class="${w.rueckgang_ath > 0.05 ? "neg" : ""}">${fmtPct(-w.rueckgang_ath)}</span> <span class="small muted">Hoch ${fmt(w.ath)} am ${date(w.ath_datum)}</span>`)}
       ${kv(term("stufe", `Kaufstufe (${basisKurz(w)})`), tierBadge(w) + (w.zusatzkauf ? ` <span class="small">${fmt(w.zusatzkauf, 0)} ${esc(OV.regeln.waehrung_grundbetrag)}</span>` : ""))}
       ${kv(term("stufe", "Nächste Stufe bei"), naechste ? `${fmt(kursNaechste)} <span class="small muted">(−${naechste.ab_prozent} %)</span>` : "höchste erreicht")}
       ${kv("52-Wochen-Spanne", `${fmt(w.tief52)} – ${fmt(w.hoch52)}`)}
