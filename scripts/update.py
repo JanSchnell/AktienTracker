@@ -25,6 +25,8 @@ ROOT = Path(__file__).resolve().parent.parent
 CONFIG = ROOT / "config"
 OUT = ROOT / "docs" / "data"
 STATE_FILE = ROOT / "state" / "state.json"
+# Median des erwarteten KGV je Sektor, aus dem vorigen Lauf (Watchlist + Entdecken)
+BRANCHEN_KGV = {}
 
 _SEC_RAW = os.environ.get("SEC_USER_AGENT") or ""
 # Zeilenumbrüche/Tabs aus dem Secret entfernen, sonst lehnt requests den Header ab
@@ -179,7 +181,7 @@ def telegram_pruefen():
 
 # ---------------------------------------------------------------- Kurse & Kennzahlen
 
-def price_block(hist, stufen):
+def price_block(hist, rules):
     close = hist["Close"].dropna()
     last = float(close.iloc[-1])
     last_date = close.index[-1]
@@ -196,6 +198,9 @@ def price_block(hist, stufen):
 
     ytd = close[close.index.year < last_date.year]
     drawdown = (1 - last / ath) * 100
+    # Kurzfristiger Rückgang: vom höchsten Schlusskurs der letzten N Handelstage
+    n = (rules.get("kursrutsch") or {}).get("handelstage", 10)
+    kurz = close.iloc[-n:]
     return {
         "rsi": rsi(close),
         "kurs": last,
@@ -206,6 +211,8 @@ def price_block(hist, stufen):
         "rueckgang_ath": drawdown,
         "hoch52": high52,
         "rueckgang_52w": (1 - last / high52) * 100,
+        "rueckgang_kurz": (1 - last / float(kurz.max())) * 100,
+        "kurz_hoch_datum": kurz.idxmax().strftime("%Y-%m-%d"),
         "tief52": float(year.min()),
         "sma200": sma200,
         "abstand_sma200": pct(last, sma200),
@@ -216,7 +223,6 @@ def price_block(hist, stufen):
         "perf_1j": pct(last, back(365)),
         "perf_5j": pct(last, back(5 * 365)),
         "perf_ytd": pct(last, float(ytd.iloc[-1])) if len(ytd) else None,
-        "stufe": tier_for(drawdown, stufen),
         "tag_tief": clean(hist["Low"].dropna().iloc[-1]) if "Low" in hist else None,
         "tag_hoch": clean(hist["High"].dropna().iloc[-1]) if "High" in hist else None,
     }
@@ -291,7 +297,11 @@ def annual(t):
         "rueckkaeufe": by_year(cf, ["Repurchase Of Capital Stock"]),
         "dividenden": by_year(cf, ["Cash Dividends Paid", "Common Stock Dividend Paid"]),
         "sbc": by_year(cf, ["Stock Based Compensation"]),
+        "ebit": by_year(inc, ["EBIT", "Operating Income"]),
+        "steuerquote": by_year(inc, ["Tax Rate For Calcs"]),
+        "investiertes_kapital": by_year(bs, ["Invested Capital"]),
     }
+    stichtage = {c.year: c.strftime("%Y-%m-%d") for c in inc.columns}
     jahre = sorted({y for v in f.values() for y in v})
     out = []
     for y in jahre:
@@ -304,8 +314,68 @@ def annual(t):
         e["nettomarge"] = e["nettogewinn"] / u if u and e["nettogewinn"] is not None else None
         e["capex_quote"] = abs(e["capex"]) / u if u and e["capex"] is not None else None
         e["netto_schulden"] = (e["schulden"] or 0) - (e["cash"] or 0) if e["schulden"] is not None or e["cash"] is not None else None
+        e["stichtag"] = stichtage.get(y)
+        e["roic"] = roic(e["ebit"], e["steuerquote"], e["investiertes_kapital"])
         out.append(e)
     return out
+
+
+def roic(ebit, steuer, kapital):
+    """Rendite auf das investierte Kapital (Eigen- + Fremdkapital): EBIT nach Steuern ÷ investiertes Kapital.
+    Anders als die Eigenkapitalrendite nicht durch Aktienrückkäufe oder Schulden aufgebläht."""
+    if ebit is None or not kapital or kapital <= 0:
+        return None
+    t = steuer if steuer is not None and 0 <= steuer <= 0.5 else 0.21
+    return ebit * (1 - t) / kapital
+
+
+def kgv_historie(jahre, hist, info):
+    """KGV zum Ende jedes Geschäftsjahres: Schlusskurs am Stichtag ÷ verwässerter Gewinn je Aktie.
+    Nur wenn Kurs und Bilanz dieselbe Währung haben (sonst z. B. ADRs falsch)."""
+    if hist is None or hist.empty or (info.get("financialCurrency") or info.get("currency")) != info.get("currency"):
+        return []
+    close = hist["Close"].dropna()
+    idx = close.index.tz_localize(None) if getattr(close.index, "tz", None) is not None else close.index
+    close = pd.Series(close.values, index=idx)
+    out = []
+    for e in jahre:
+        if not e.get("stichtag") or not e.get("eps") or e["eps"] <= 0:
+            continue
+        vor = close[close.index <= pd.Timestamp(e["stichtag"])]
+        if vor.empty:
+            continue
+        k = float(vor.iloc[-1]) / e["eps"]
+        if 0 < k < 300:
+            out.append({"jahr": e["jahr"], "kgv": k})
+    return out
+
+
+def median(werte):
+    w = sorted(werte)
+    n = len(w)
+    return None if not n else w[n // 2] if n % 2 else (w[n // 2 - 1] + w[n // 2]) / 2
+
+
+def bewertungs_vergleich(f, info):
+    """Ist die Aktie gerade teurer oder günstiger als in ihren letzten Jahren und als die Branche?"""
+    out = {}
+    hist = (f or {}).get("kgv_historie") or []
+    jetzt = clean(info.get("trailingPE"))
+    if len(hist) >= 3 and jetzt and jetzt > 0:
+        m = median([x["kgv"] for x in hist])
+        out |= {"kgv_jetzt": jetzt, "kgv_median_hist": m, "verhaeltnis_hist": jetzt / m,
+                "hist_von": hist[0]["jahr"], "hist_bis": hist[-1]["jahr"]}
+    fpe, sektor = clean(info.get("forwardPE")), info.get("sector")
+    b = BRANCHEN_KGV.get(sektor) or {}
+    if fpe and fpe > 0 and b.get("median") and sektor != "Financial Services":
+        out |= {"kgv_erwartet": fpe, "branche": sektor, "branche_median": b["median"], "branche_n": b["n"],
+                "verhaeltnis_branche": fpe / b["median"]}
+    return out or None
+
+
+def relativ_punkte(r):
+    """Punkte 0-20 für das Verhältnis aktuelle Bewertung ÷ Vergleichswert (unter 1 = günstiger)."""
+    return stufe_wert(-r, [(-0.8, 20), (-0.95, 16), (-1.1, 11), (-1.3, 7)], 3)
 
 
 def pruefung(jahre, info, sektor):
@@ -416,7 +486,7 @@ def officers(info):
     return out
 
 
-def fundamentals(t, info):
+def fundamentals(t, info, hist=None):
     out = {
         "sektor": info.get("sector"),
         "branche": info.get("industry"),
@@ -489,6 +559,10 @@ def fundamentals(t, info):
         pass
 
     out["jahre"] = annual(t)
+    out["kgv_historie"] = kgv_historie(out["jahre"], hist, info)
+    letzte = next((e for e in reversed(out["jahre"]) if e.get("roic") is not None), None)
+    out["roic"] = letzte["roic"] if letzte else None
+    out["bewertung_vergleich"] = bewertungs_vergleich(out, info)
     out["ampel"] = ampel(out) or ampel_jahr(out["jahre"])
     out["pruefung"] = pruefung(out["jahre"], info, out["sektor"])
     out["management"] = officers(info)
@@ -659,9 +733,12 @@ def stufe_wert(v, leiter, sonst=0):
     return sonst
 
 
-def screen(info, p):
-    """Regelbasierter Daten-Score (0-100) aus fünf Bausteinen je 0-20, mit Begründungen.
+def screen(info, p, f=None):
+    """Gesamturteil (0-100) aus bis zu sieben Bausteinen je 0-20, mit Begründungen:
+    Wachstum, Qualität (Marge + ROIC), Bewertung (absolut, ggü. eigener Historie und Branche),
+    Bilanz, Kurstrend, letzte Zahlen (Ampel) und langfristige Entwicklung (Kennzahlen-Check).
     Beschreibt nur die aktuelle Datenlage, ist keine Prognose und keine Kaufempfehlung."""
+    f = f or {}
     pc = lambda k: None if clean(info.get(k)) is None else clean(info.get(k)) * 100
     wachstum, gewinn, marge, roe = pc("revenueGrowth"), pc("earningsGrowth"), pc("operatingMargins"), pc("returnOnEquity")
     fpe, peg, kuv = clean(info.get("forwardPE")), clean(info.get("trailingPegRatio")), clean(info.get("priceToSalesTrailing12Months"))
@@ -679,18 +756,49 @@ def screen(info, p):
             plus.append(f"Umsatz wächst stark ({wachstum:+.0f} % ggü. Vorjahr)")
         elif wachstum < 0:
             minus.append(f"Umsatz schrumpft ({wachstum:+.0f} % ggü. Vorjahr)")
+    q = []
     if marge is not None:
-        b["profit"] = stufe_wert(marge, [(30, 20), (20, 16), (10, 11), (0, 5)])
+        q.append(stufe_wert(marge, [(30, 20), (20, 16), (10, 11), (0, 5)]))
         if marge >= 25:
             plus.append(f"Hohe operative Marge ({marge:.0f} %)")
         elif marge < 0:
             minus.append(f"Operativ im Minus (Marge {marge:.0f} %)")
+    # Kapitalrendite: ROIC, bei Banken/Versicherungen die Eigenkapitalrendite
+    kr = roe if finanz else (f.get("roic") * 100 if f.get("roic") is not None else None)
+    kr_name = "Eigenkapitalrendite" if finanz else "ROIC"
+    if kr is not None:
+        q.append(stufe_wert(kr, [(15, 20), (12, 16), (8, 11), (4, 6)], 2) if finanz else stufe_wert(kr, [(25, 20), (15, 16), (10, 11), (5, 6), (0, 3)]))
+        if kr >= (15 if finanz else 20):
+            plus.append(f"Hohe Kapitalrendite ({kr_name} {kr:.0f} %)")
+        elif kr < (6 if finanz else 5):
+            minus.append(f"Niedrige Kapitalrendite ({kr_name} {kr:.0f} %)")
+    if q:
+        b["profit"] = round(sum(q) / len(q))
     if fpe is not None and 0 < fpe < 4:
         minus.append(f"KGV erwartet auffällig niedrig ({fpe:.1f}): Datenfehler oder einmalige Gewinnspitze möglich")
     elif fpe is not None and fpe > 0:
-        b["bewertung"] = stufe_wert(-fpe, [(-15, 20), (-22, 16), (-30, 11), (-45, 6)], 2)
+        absolut = stufe_wert(-fpe, [(-15, 20), (-22, 16), (-30, 11), (-45, 6)], 2)
         if fcf_rendite is not None and fcf_rendite >= 4:
-            b["bewertung"] = min(20, b["bewertung"] + 3)
+            absolut = min(20, absolut + 3)
+        # Feste Grenzen passen nicht für jede Branche: Vergleich mit eigener Historie und Branche zählt mit
+        teile = [absolut]
+        v = f.get("bewertung_vergleich") or {}
+        if v.get("verhaeltnis_hist"):
+            r = v["verhaeltnis_hist"]
+            teile.append(relativ_punkte(r))
+            zr = f"{v['hist_von']}–{v['hist_bis']}"
+            if r <= 0.8:
+                plus.append(f"KGV unter dem eigenen Schnitt ({v['kgv_jetzt']:.0f} statt üblich {v['kgv_median_hist']:.0f}, {zr})")
+            elif r >= 1.3:
+                minus.append(f"KGV über dem eigenen Schnitt ({v['kgv_jetzt']:.0f} statt üblich {v['kgv_median_hist']:.0f}, {zr})")
+        if v.get("verhaeltnis_branche"):
+            r = v["verhaeltnis_branche"]
+            teile.append(relativ_punkte(r))
+            if r <= 0.8:
+                plus.append(f"Günstiger als die Branche (KGV erw. {fpe:.0f} statt {v['branche_median']:.0f})")
+            elif r >= 1.3:
+                minus.append(f"Teurer als die Branche (KGV erw. {fpe:.0f} statt {v['branche_median']:.0f})")
+        b["bewertung"] = round(sum(teile) / len(teile))
         if fpe <= 18:
             plus.append(f"Niedrige Bewertung (KGV erwartet {fpe:.0f})")
         elif fpe >= 45:
@@ -707,6 +815,9 @@ def screen(info, p):
             minus.append(f"Heiß gelaufen ({a:+.0f} % über der 200-Tage-Linie)")
         elif (p6 or 0) >= 20 and (a or 0) > 0:
             plus.append(f"Kurstrend intakt ({p6:+.0f} % in 6 Monaten)")
+        elif b["trend"] <= 6:
+            # Momentum ist gut belegt: Abwärtstrends setzen sich im Schnitt eher fort
+            minus.append("Kurstrend schwach (unter der 200-Tage-Linie" + (f", {p12:+.0f} % in 12 Monaten)" if p12 is not None else ")"))
         if p.get("rueckgang_ath", 0) >= 40:
             minus.append(f"{p['rueckgang_ath']:.0f} % unter dem Allzeithoch, Ursache prüfen")
     if not finanz and debt is not None and cash is not None:
@@ -727,10 +838,22 @@ def screen(info, p):
             plus.append(f"Viel Free Cashflow im Verhältnis zum Börsenwert ({fcf_rendite:.1f} %)")
         elif fcf_rendite < 0:
             minus.append("Free Cashflow negativ")
+    am = f.get("ampel")
+    if am and am.get("farbe"):
+        b["zahlen"] = {"gruen": 18, "gelb": 11, "rot": 3}[am["farbe"]]
+        titel = f"Geschäftsjahr {am['jahr']}" if am.get("basis") == "jahr" else "Letztes Quartal"
+        if am["farbe"] == "gruen":
+            plus.append(f"{titel} stark ({', '.join(am['gruende'][:2])})")
+        elif am["farbe"] == "rot":
+            minus.append(f"{titel} schwach ({', '.join(am['gruende'][:2])})")
+    pr = f.get("pruefung") or []
+    if len(pr) >= 4:
+        b["langfrist"] = round(sum({"gruen": 1, "gelb": 0.5}.get(x["farbe"], 0) for x in pr) / len(pr) * 20)
     return {
         "score": round(sum(b.values()) / len(b) * 5) if len(b) >= 3 else None,
         "bausteine": b, "plus": plus, "minus": minus,
-        "m": {"umsatzwachstum": wachstum, "gewinnwachstum": gewinn, "op_marge": marge, "roe": roe, "kgv": clean(info.get("trailingPE")), "kgv_erwartet": fpe, "peg": peg,
+        "m": {"umsatzwachstum": wachstum, "gewinnwachstum": gewinn, "op_marge": marge, "roe": roe,
+              "roic": f.get("roic") * 100 if f.get("roic") is not None else None, "kgv": clean(info.get("trailingPE")), "kgv_erwartet": fpe, "peg": peg,
               "kuv": kuv, "dividende": clean(info.get("dividendYield")), "fcf_rendite": fcf_rendite},
         "marktkap": mc, "sektor": info.get("sector"), "branche": info.get("industry"),
         "analysten": info.get("recommendationKey"), "kursziel": clean(info.get("targetMeanPrice")),
@@ -738,24 +861,45 @@ def screen(info, p):
 
 
 def entdecken_eintrag(entry, p, s, waehrung, in_watchlist, heiss):
-    keys = ("kurs", "tag_pct", "rueckgang_ath", "abstand_sma200", "rsi", "perf_1m", "perf_6m", "perf_1j")
+    keys = ("kurs", "tag_pct", "rueckgang_ath", "rueckgang_52w", "rueckgang_kurz", "abstand_sma200", "rsi", "perf_1m", "perf_6m", "perf_1j")
     return {k: entry.get(k) for k in ("symbol", "name", "kategorie", "thema", "bekannt", "kurz", "these", "risiko")} | \
         {k: p.get(k) for k in keys} | s | {"waehrung": waehrung, "in_watchlist": in_watchlist, "heiss": heiss}
+
+
+def kaufstufe(typ, p, f, rules):
+    """ETFs: Rückgang vom Allzeithoch (breite Indizes erholen sich bisher immer).
+    Aktien: Rückgang vom 52-Wochen-Hoch, und nur wenn die Ampel nicht rot ist,
+    damit ein dauerhaft schrumpfendes Geschäft nicht als „günstig“ erscheint."""
+    basis = "ath" if typ == "etf" else "52w"
+    rueck = p["rueckgang_ath"] if basis == "ath" else p["rueckgang_52w"]
+    roh = tier_for(rueck, rules["stufen"])
+    gesperrt = bool(roh) and typ != "etf" and ((f or {}).get("ampel") or {}).get("farbe") == "rot"
+    return {"stufe": 0 if gesperrt else roh, "stufe_basis": basis, "stufe_rueckgang": rueck, "stufe_gesperrt": gesperrt}
+
+
+def kursrutsch(typ, p, rules):
+    k = rules.get("kursrutsch") or {}
+    grenze = k.get("etf" if typ == "etf" else "aktie")
+    return grenze is not None and p.get("rueckgang_kurz", 0) >= grenze
 
 
 def kern_item(entry, info, p, f, heiss, rules):
     """Gemeinsame Felder für die Analyse-Seite, für Watchlist-Werte und Ideen aus „Entdecken“."""
     stufen = rules["stufen"]
-    grund = rules["grundbetrag"].get(entry.get("typ"), 0)
-    faktor = stufen[p["stufe"] - 1]["faktor"] if p["stufe"] else 0
+    typ = entry.get("typ")
+    st = kaufstufe(typ, p, f, rules)
+    grund = rules["grundbetrag"].get(typ, 0)
+    faktor = stufen[st["stufe"] - 1]["faktor"] if st["stufe"] else 0
     f = f or {}
     return {
         **entry,
         "langname": info.get("longName") or info.get("shortName"),
         "waehrung": info.get("currency"),
         **p,
+        **st,
+        "kursrutsch": kursrutsch(typ, p, rules),
         "zusatzkauf": grund * faktor,
-        "naechste_stufe": next((s["ab_prozent"] for s in stufen if s["ab_prozent"] > p["rueckgang_ath"]), None),
+        "naechste_stufe": next((s["ab_prozent"] for s in stufen if s["ab_prozent"] > st["stufe_rueckgang"]), None),
         "ampel": f.get("ampel"),
         "kgv": f.get("kgv"),
         "kgv_erwartet": f.get("kgv_erwartet"),
@@ -772,14 +916,18 @@ def kern_item(entry, info, p, f, heiss, rules):
     }
 
 
-def idee_detail(e, t, hist, info, p, s, heiss, rules):
-    """Analyse-Seite für eine Idee, damit sie sich vor der Aufnahme in die Watchlist ansehen lässt."""
+def idee_kennzahlen(e, t, hist, info):
     try:
-        f = fundamentals(t, info)
+        f = fundamentals(t, info, hist)
         termin_ergaenzen(f, e["symbol"], load_json(CONFIG / "berichte.json", {}) or {}, datetime.now().strftime("%Y-%m-%d"))
+        return f
     except Exception as ex:
         print("FEHLER Idee Kennzahlen", e["symbol"], scrub(ex))
-        f = None
+        return None
+
+
+def idee_detail(e, hist, info, p, f, s, heiss, rules):
+    """Analyse-Seite für eine Idee, damit sie sich vor der Aufnahme in die Watchlist ansehen lässt."""
     entry = {k: e[k] for k in ("symbol", "name", "kategorie") if k in e} | {"typ": "aktie"}
     item = kern_item(entry, info, p, f, heiss, rules) | {"screen": s, "idee": True}
     save_json(OUT / "werte" / f"{safe_name(e['symbol'])}.json", {
@@ -805,10 +953,11 @@ def scan_universe(watch, rules, profiles, items):
             hist = t.history(period="max", auto_adjust=False)
             if hist is None or hist.empty:
                 raise RuntimeError("keine Kursdaten")
-            p = price_block(hist, rules["stufen"])
+            p = price_block(hist, rules)
             info = t.info or {}
-            sc, heiss = screen(info, p), overheat_level(p, "aktie", rules)
-            idee_detail(e, t, hist, info, p, sc, heiss, rules)
+            f = idee_kennzahlen(e, t, hist, info)
+            sc, heiss = screen(info, p, f), overheat_level(p, "aktie", rules)
+            idee_detail(e, hist, info, p, f, sc, heiss, rules)
             out.append(entdecken_eintrag(e, p, sc, info.get("currency"), False, heiss))
             print("ok    Idee", e["symbol"])
         except Exception as ex:
@@ -826,15 +975,14 @@ def process_ticker(entry, rules, state, meldungen, profiles, politik):
     hist = t.history(period="max", auto_adjust=False)
     if hist is None or hist.empty:
         raise RuntimeError("keine Kursdaten")
-    stufen = rules["stufen"]
-    p = price_block(hist, stufen)
+    p = price_block(hist, rules)
     try:
         info = t.info or {}
     except Exception:
         info = {}
 
     is_etf = entry.get("typ") == "etf"
-    f = None if is_etf else fundamentals(t, info)
+    f = None if is_etf else fundamentals(t, info, hist)
     if f:
         termin_ergaenzen(f, sym, load_json(CONFIG / "berichte.json", {}) or {}, datetime.now().strftime("%Y-%m-%d"))
     ins = [] if is_etf else insider_trades(t)
@@ -850,7 +998,7 @@ def process_ticker(entry, rules, state, meldungen, profiles, politik):
     item = kern_item(entry, info, p, f, heiss, rules) | {
         "insider_kaeufe_90t": len(ins_kaeufe_90),
         "politiker_90t": len(pol_90),
-        "screen": None if is_etf else screen(info, p),
+        "screen": None if is_etf else screen(info, p, f),
     }
     detail = {"item": item, "historie": history_series(hist), "fundamentaldaten": f, "insider": ins, "insider_bestand": bestand,
               "politiker": pol, "profil": profiles.get(sym)}
@@ -1007,7 +1155,7 @@ def wochenbericht(items, entdecken, state, now):
         neu_in_stufe = [w for w in items if (w.get("stufe") or 0) > stufen_alt.get(w["symbol"], w.get("stufe") or 0)]
         if neu_in_stufe:
             zeilen += ["", "<b>Neu in einer höheren Kaufstufe</b>"]
-            zeilen += [f"• {name(w)}: {w['rueckgang_ath']:.0f} % unter Allzeithoch" for w in neu_in_stufe[:8]]
+            zeilen += [f"• {name(w)}: {w['stufe_rueckgang']:.0f} % unter {'Allzeithoch' if w.get('stufe_basis') == 'ath' else '52-Wochen-Hoch'}" for w in neu_in_stufe[:8]]
     heiss = [w for w in items if w.get("heiss")]
     if heiss:
         zeilen += ["", f"🔥 <b>Heiß gelaufen:</b> {', '.join(name(w) for w in heiss[:6])}"]
@@ -1026,7 +1174,7 @@ def wochenbericht(items, entdecken, state, now):
         zeilen += ["", "<b>Neue Ideen für deine Recherche</b>"]
         for x in ideen:
             grund = html.escape((x.get("plus") or [x.get("kurz") or ""])[0])
-            zeilen.append(f"💡 <b>{html.escape(x['name'])}</b> ({html.escape(x['kategorie'])}, Score {x['score']}): {grund}")
+            zeilen.append(f"💡 <b>{html.escape(x['name'])}</b> ({html.escape(x['kategorie'])}, Urteil {x['score']}/100): {grund}")
 
     repo = os.environ.get("GITHUB_REPOSITORY") or "JanSchnell/AktienTracker"
     owner, name_repo = repo.split("/")
@@ -1131,18 +1279,34 @@ def investor_holdings(inv, state, meldungen):
 
 # ---------------------------------------------------------------- Hauptprogramm
 
+def branchen_kgv(entdecken):
+    """Median des erwarteten KGV je Sektor über Watchlist und Entdecken (mindestens 4 Werte)."""
+    gruppen = {}
+    for x in entdecken:
+        k = (x.get("m") or {}).get("kgv_erwartet")
+        if x.get("sektor") and k and 0 < k < 200:
+            gruppen.setdefault(x["sektor"], []).append(k)
+    return {s: {"median": median(v), "n": len(v)} for s, v in gruppen.items() if len(v) >= 4}
+
+
 def main():
     watch = load_json(CONFIG / "watchlist.json")["werte"]
     rules = load_json(CONFIG / "rules.json")
     investors = (load_json(CONFIG / "investors.json", {}) or {}).get("investoren", [])
     state = load_json(STATE_FILE, {}) or {}
     profiles = load_profiles()
+    BRANCHEN_KGV.clear()
+    BRANCHEN_KGV.update(state.get("branchen_kgv") or {})
     meldungen, fehler, items, politik = [], [], [], []
     # Frühere Alarm-Stände ablösen: die Stufen dienen einmalig als Vergleich für den ersten Bericht
     alte_stufen = state.pop("stufen", None)
     if alte_stufen and "woche_stufen" not in state:
         state["woche_stufen"] = alte_stufen
     state.pop("heiss", None)
+    # Kaufstufen für Aktien beziehen sich jetzt aufs 52-Wochen-Hoch: alter Vergleichsstand passt nicht mehr
+    if state.get("stufen_basis") != "etf_ath_aktie_52w":
+        state.pop("woche_stufen", None)
+        state["stufen_basis"] = "etf_ath_aktie_52w"
 
     for e in watch:
         try:
@@ -1164,6 +1328,7 @@ def main():
             print("FEHLER 13F", inv["name"], scrub(ex))
 
     entdecken = scan_universe(watch, rules, profiles, items)
+    state["branchen_kgv"] = branchen_kgv(entdecken)
     alarme = alarme_pruefen(items, datetime.now(timezone.utc))
     telegram_pruefen()
     now =datetime.now(timezone.utc).isoformat(timespec="minutes")

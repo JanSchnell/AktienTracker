@@ -49,10 +49,22 @@ function betraege() {
 const betragFuer = (w) => (w.stufe ? betraege()[w.typ === "etf" ? "etf" : "aktie"][w.stufe - 1] : 0);
 function applyBetraege() { OV.werte.forEach((w) => { w.zusatzkauf = betragFuer(w); }); }
 
+// ETFs: Stufen vom Allzeithoch, Aktien vom 52-Wochen-Hoch
+const basisName = (w) => (w.stufe_basis === "ath" ? "Allzeithoch" : "52-Wochen-Hoch");
+const basisKurz = (w) => (w.stufe_basis === "ath" ? "ATH" : "52W");
+const basisKurs = (w) => (w.stufe_basis === "ath" ? w.ath : w.hoch52);
+const rutschTage = () => (OV.regeln.kursrutsch || {}).handelstage || 10;
+
 function tierBadge(w) {
+  if (w.stufe_gesperrt) return `<span class="tier tier-0" title="Rückgang reicht für eine Stufe (−${fmt(w.stufe_rueckgang, 0)} % vom 52-Wochen-Hoch), aber die Ampel ist rot: schwache Geschäftszahlen">Ampel rot</span>`;
   if (!w.stufe) return `<span class="tier tier-0">–</span>`;
   const s = OV.regeln.stufen[w.stufe - 1];
-  return `<span class="tier tier-${w.stufe}" title="ab −${s.ab_prozent} % unter Allzeithoch">${esc(s.name)}</span>`;
+  return `<span class="tier tier-${w.stufe}" title="ab −${s.ab_prozent} % unter ${basisName(w)}">${esc(s.name)}</span>`;
+}
+
+function rutschBadge(w) {
+  if (!w.kursrutsch) return "";
+  return `<span class="badge sell" title="Kurs ${fmt(w.rueckgang_kurz, 1)} % unter dem höchsten Schlusskurs der letzten ${rutschTage()} Handelstage (${date(w.kurz_hoch_datum)}). Ursache prüfen, kein Kaufsignal.">▼ ${fmt(w.rueckgang_kurz, 0)} %</span>`;
 }
 
 function destroyCharts() { charts.forEach((c) => c.destroy()); charts = []; }
@@ -64,11 +76,11 @@ function heatBadge(w) {
     : `<span class="badge hot" title="Deutlich über der 200-Tage-Linie oder RSI hoch">🔥 heiß</span>`;
 }
 
-function checkBadge(w) {
-  if (!w.pruefung_anzahl) return "–";
-  const r = w.pruefung_gruen / w.pruefung_anzahl;
-  const f = r >= 0.6 && !w.pruefung_rot ? "gruen" : r >= 0.6 || w.pruefung_rot <= 1 ? "gelb" : "rot";
-  return `<span class="dot ${f}"></span> ${w.pruefung_gruen}/${w.pruefung_anzahl}`;
+const urteilFarbe = (n) => (n >= 70 ? "gruen" : n >= 50 ? "gelb" : "rot");
+const URTEIL_TEXT = { gruen: "Starke Datenlage", gelb: "Gemischte Datenlage", rot: "Schwache Datenlage" };
+function urteilBadge(n, gross = false) {
+  if (n == null) return "–";
+  return `<span class="urteil u-${urteilFarbe(n)}${gross ? " gross" : ""}" title="Gesamturteil ${n} von 100: ${URTEIL_TEXT[urteilFarbe(n)]}">${n}</span>`;
 }
 
 const repo = () => OV.repo || "JanSchnell/AktienTracker";
@@ -132,13 +144,14 @@ function removeDialog(sym, name, nachher) {
 
 const state = {
   kat: store.get("kat", "Alle"),
-  sort: store.get("sort", { key: "rueckgang_ath", asc: false }),
+  sort: store.get("sort", { key: "stufe_rueckgang", asc: false }),
   q: "",
   fokus: null,
 };
 
 const FOKUS = {
   stufe: { label: "In einer Kaufstufe", test: (w) => w.stufe > 0 },
+  rutsch: { label: "Kursrutsch in den letzten Tagen", test: (w) => !!w.kursrutsch },
   ath: { label: "Nahe Allzeithoch (unter 3 %)", test: (w) => w.rueckgang_ath < 3 },
   heiss: { label: "Heiß gelaufen", test: (w) => w.heiss > 0 },
   zahlen: { label: "Quartalszahlen in den nächsten 14 Tagen", test: (w) => { const d = daysUntil(w.naechste_zahlen); return d != null && d >= 0 && d <= 14; } },
@@ -149,15 +162,14 @@ const COLS = [
   { key: "name", label: "Wert", get: (w) => w.name.toLowerCase() },
   { key: "kurs", label: "Kurs", get: (w) => w.kurs },
   { key: "tag_pct", label: "Heute", get: (w) => w.tag_pct },
-  { key: "rueckgang_ath", label: "vom ATH", get: (w) => w.rueckgang_ath },
+  { key: "stufe_rueckgang", label: "Rückgang", get: (w) => w.stufe_rueckgang },
+  { key: "rueckgang_kurz", label: "10 Tage", get: (w) => w.rueckgang_kurz, hide: true },
   { key: "stufe", label: "Stufe", get: (w) => w.stufe },
   { key: "zusatzkauf", label: "Mein Betrag", get: (w) => w.zusatzkauf, hide: true },
   { key: "abstand_sma200", label: "vs. 200-Tage", get: (w) => w.abstand_sma200, hide: true },
   { key: "perf_1j", label: "1 Jahr", get: (w) => w.perf_1j, hide: true },
   { key: "kgv_erwartet", label: "KGV erw.", get: (w) => w.kgv_erwartet, hide: true },
-  { key: "ampel", label: "Ampel", get: (w) => (w.ampel ? w.ampel.punkte : null), hide: true },
-  { key: "pruefung_gruen", label: "Check", get: (w) => (w.pruefung_anzahl ? w.pruefung_gruen / w.pruefung_anzahl : null), hide: true },
-  { key: "score", label: "Score", get: (w) => (w.screen ? w.screen.score : null), hide: true },
+  { key: "urteil", label: "Urteil", get: (w) => (w.screen ? w.screen.score : null), hide: true },
   { key: "naechste_zahlen", label: "Zahlen am", get: (w) => w.naechste_zahlen || "9999", hide: true },
 ];
 
@@ -166,25 +178,49 @@ function statTile(key, label, value, sub) {
     <div class="sub">${esc(sub)}</div></button>`;
 }
 
+function klumpenHinweis(werte) {
+  const aktien = werte.filter((w) => w.typ !== "etf");
+  const top = (liste) => {
+    const z = {};
+    liste.forEach((w) => { z[w.kategorie] = (z[w.kategorie] || 0) + 1; });
+    return Object.entries(z).sort((a, b) => b[1] - a[1])[0];
+  };
+  const saetze = [];
+  for (const [liste, was] of [[aktien.filter((w) => w.stufe > 0), "in einer Kaufstufe"], [aktien.filter((w) => w.kursrutsch), "im Kursrutsch"]]) {
+    if (liste.length < 3) continue;
+    const [k, n] = top(liste);
+    if (n / liste.length >= 0.5) saetze.push(`${n} von ${liste.length} Aktien ${was} gehören zu „${esc(k)}“.`);
+  }
+  if (aktien.length >= 8) {
+    const [k, n] = top(aktien);
+    if (n / aktien.length >= 0.3) saetze.push(`${Math.round((n / aktien.length) * 100)} % deiner Watchlist-Aktien sind „${esc(k)}“.`);
+  }
+  if (!saetze.length) return "";
+  return `<div class="note small"><strong>${term("klumpen", "Klumpenrisiko")}:</strong> ${saetze.join(" ")}
+    Solche Werte hängen an denselben Treibern und fallen oft gemeinsam. Wer mehrere davon kauft, setzt stärker auf ein einziges Thema, als es sich anfühlt.</div>`;
+}
+
 function renderOverview() {
   const werte = sichtbar();
   const kats = ["Alle", ...new Set(werte.map((w) => w.kategorie))];
   if (!kats.includes(state.kat)) state.kat = "Alle";
   const namen = (f, n = 3) => werte.filter(FOKUS[f].test).slice(0, n).map((w) => w.name).join(", ") || "keine";
   const zahl = (f) => werte.filter(FOKUS[f].test).length;
-  const tiefste = [...werte].sort((a, b) => b.rueckgang_ath - a.rueckgang_ath)[0];
+  const tiefste = [...werte].sort((a, b) => b.stufe_rueckgang - a.stufe_rueckgang)[0];
   const weg = versteckt().filter((s) => OV.werte.some((w) => w.symbol === s)).length;
 
   $app.innerHTML = `
     <div class="grid stats">
-      ${statTile("stufe", "In einer Kaufstufe", `${zahl("stufe")} / ${werte.length}`, `mindestens ${OV.regeln.stufen[0].ab_prozent} % unter Allzeithoch`)}
-      ${tiefste ? `<a class="card stat" href="#/wert/${encodeURIComponent(tiefste.symbol)}"><div class="label">Größter Rückgang</div><div class="value neg">${fmtPct(-tiefste.rueckgang_ath)}</div>
-        <div class="sub">${esc(tiefste.name)} öffnen →</div></a>` : ""}
+      ${statTile("stufe", "In einer Kaufstufe", `${zahl("stufe")} / ${werte.length}`, `ab −${OV.regeln.stufen[0].ab_prozent} %: ETFs vom Allzeithoch, Aktien vom 52-Wochen-Hoch`)}
+      ${statTile("rutsch", `Kursrutsch (${rutschTage()} Handelstage)`, zahl("rutsch"), namen("rutsch"))}
+      ${tiefste ? `<a class="card stat" href="#/wert/${encodeURIComponent(tiefste.symbol)}"><div class="label">Größter Rückgang</div><div class="value neg">${fmtPct(-tiefste.stufe_rueckgang)}</div>
+        <div class="sub">${esc(tiefste.name)} (vom ${basisName(tiefste)}) öffnen →</div></a>` : ""}
       ${statTile("ath", "Nahe Allzeithoch (&lt; 3 %)", zahl("ath"), namen("ath"))}
       ${statTile("heiss", "Heiß gelaufen 🔥", zahl("heiss"), namen("heiss"))}
       ${statTile("zahlen", "Quartalszahlen in 14 Tagen", zahl("zahlen"), namen("zahlen"))}
       ${statTile("insider", "Insider-Käufe (90 Tage)", zahl("insider"), namen("insider"))}
     </div>
+    ${klumpenHinweis(werte)}
 
     <div class="toolbar filter">
       <select id="katWahl" class="${state.kat !== "Alle" ? "aktiv" : ""}" aria-label="Nach Branche filtern">
@@ -239,7 +275,7 @@ function renderOverview() {
 }
 
 function renderRows() {
-  const col = COLS.find((c) => c.key === state.sort.key) || COLS[3];
+  const col = COLS.find((c) => c.key === state.sort.key) || COLS.find((c) => c.key === "stufe_rueckgang");
   const q = state.q.trim().toLowerCase();
   let rows = sichtbar().filter((w) => (state.kat === "Alle" || w.kategorie === state.kat) &&
     (!state.fokus || FOKUS[state.fokus].test(w)) &&
@@ -256,22 +292,21 @@ function renderRows() {
   tbl.querySelector("tbody").innerHTML = rows.map((w) => {
     const z = daysUntil(w.naechste_zahlen);
     return `<tr data-s="${esc(w.symbol)}">
-      <td><div class="name">${esc(w.name)} ${heatBadge(w)} ${w.insider_kaeufe_90t ? `<span class="badge buy" title="Insider-Käufe in den letzten 90 Tagen">Insider</span>` : ""}
+      <td><div class="name">${esc(w.name)} ${heatBadge(w)} ${rutschBadge(w)} ${w.insider_kaeufe_90t ? `<span class="badge buy" title="Insider-Käufe in den letzten 90 Tagen">Insider</span>` : ""}
           ${w.politiker_90t ? `<span class="badge" title="Politiker-Trades in den letzten 90 Tagen gemeldet">🏛 ${w.politiker_90t}</span>` : ""}
           ${aktiveAlarme(w.symbol).length ? `<span title="Preisalarm aktiv" aria-label="Preisalarm aktiv">🔔</span>` : ""}</div>
           <div class="sym">${esc(w.symbol)} · ${esc(w.kategorie)}</div></td>
       <td>${fmt(w.kurs)} <span class="sym">${esc(w.waehrung || "")}</span></td>
       <td class="${cls(w.tag_pct)}">${fmtPct(w.tag_pct, 2)}</td>
-      <td><div class="dd"><span class="${w.rueckgang_ath > 0.05 ? "neg" : ""}">${fmtPct(-w.rueckgang_ath)}</span>
-          <span class="ddbar hide-m"><i style="width:${Math.min(100, w.rueckgang_ath * 2)}%"></i></span></div></td>
+      <td><div class="dd"><span class="${w.stufe_rueckgang > 0.05 ? "neg" : ""}" title="vom ${basisName(w)}">${fmtPct(-w.stufe_rueckgang)} <span class="sym">${basisKurz(w)}</span></span>
+          <span class="ddbar hide-m"><i style="width:${Math.min(100, w.stufe_rueckgang * 2)}%"></i></span></div></td>
+      <td class="hide-m ${w.rueckgang_kurz > 0.05 ? "neg" : ""}" title="vom höchsten Schlusskurs der letzten ${rutschTage()} Handelstage">${fmtPct(-w.rueckgang_kurz)}</td>
       <td>${tierBadge(w)}</td>
       <td class="hide-m">${w.zusatzkauf ? fmt(w.zusatzkauf, 0) + " " + cur : "–"}</td>
       <td class="hide-m ${cls(w.abstand_sma200)}">${fmtPct(w.abstand_sma200)}</td>
       <td class="hide-m ${cls(w.perf_1j)}">${fmtPct(w.perf_1j)}</td>
       <td class="hide-m">${fmt(w.kgv_erwartet, 1)}</td>
-      <td class="hide-m">${w.ampel ? `<span class="dot ${w.ampel.farbe}" title="${esc((w.ampel.basis === "jahr" ? `Geschäftsjahr ${w.ampel.jahr}: ` : "") + w.ampel.gruende.join(" · "))}"></span>` : "–"}</td>
-      <td class="hide-m" title="Grüne Antworten im Kennzahlen-Check">${checkBadge(w)}</td>
-      <td class="hide-m" title="Daten-Score, siehe Lexikon">${w.screen && w.screen.score != null ? w.screen.score : "–"}</td>
+      <td class="hide-m">${w.screen ? urteilBadge(w.screen.score) : "–"}</td>
       <td class="hide-m">${z != null && z >= 0 ? (w.naechste_zahlen_geschaetzt ? "ca. " : "") + date(w.naechste_zahlen) + (z <= 14 ? ` <span class="badge watch">${z} T</span>` : "") : w.typ === "etf" ? "–" : "noch offen"}</td>
       <td class="x-col"><button class="x-btn" data-rm="${esc(w.symbol)}" title="${esc(w.name)} entfernen" aria-label="${esc(w.name)} entfernen">✕</button></td>
     </tr>`;
@@ -298,7 +333,7 @@ function ideenTeaser() {
   if (!neu.length) return "";
   return `<h2>Vielleicht noch nicht auf deinem Radar</h2>
     <div class="grid teaser">${neu.map((x) => `<a class="card idee" href="#/wert/${encodeURIComponent(x.symbol)}">
-      <div class="idee-kopf"><strong>${esc(x.name)}</strong><span class="score" title="Daten-Score">${x.score}</span></div>
+      <div class="idee-kopf"><strong>${esc(x.name)}</strong>${urteilBadge(x.score)}</div>
       <div class="small muted">${esc(x.kategorie)}</div><div class="small" style="margin-top:6px">${esc(x.kurz || "")}</div></a>`).join("")}</div>
     <p class="muted small">Weniger bekannte Unternehmen mit der höchsten Punktzahl im <a href="#/entdecken">Entdecken-Tab</a>. Keine Kaufempfehlung.</p>`;
 }
@@ -324,6 +359,7 @@ async function renderDetail(sym) {
   w.zusatzkauf = betragFuer(w);
 
   const sections = [
+    w.screen && w.screen.score != null && ["urteil", "Urteil", "Gesamturteil", urteilSection(w, f)],
     f && ["kennzahlen", "Kennzahlen", "Bewertung & Kennzahlen", valuationSection(w, f, cur)],
     ["kurs", "Kurs", "Kursverlauf & Kaufstufe", priceSection(w, d)],
     f && ["zahlen", "Geschäftszahlen", "Geschäftszahlen", businessSection(f, cur)],
@@ -396,8 +432,8 @@ function glance(w, f, p) {
       ${f.cash != null ? row(term("cash", "Cash"), big(f.cash) + " " + esc(bw)) : ""}
       ${net != null ? row(term("nettoschulden", net > 0 ? "Nettoschulden" : "Nettocash"), `<span class="${net > 0 ? "" : "pos"}">${big(Math.abs(net))} ${esc(bw)}</span>` + (lev != null && net > 0 ? ` <span class="small muted">(${fmt(lev, 1)}× ${term("ebitda", "EBITDA")})</span>` : "")) : ""}
       ${f.insider_anteil != null ? row(term("insider_anteil", "Anteil Insider"), fmt(f.insider_anteil * 100, 1) + " %") : ""}
-      ${w.pruefung_anzahl ? row(term("check", "Kennzahlen-Check"), `${checkBadge(w)} grün`) : ""}
-      ${row("Status", w.heiss ? heatBadge(w) : w.stufe ? tierBadge(w) : `<span class="muted">normal</span>`)}
+      ${w.screen && w.screen.score != null ? row(term("score", "Gesamturteil"), `${urteilBadge(w.screen.score)} <span class="small muted">von 100</span>`) : ""}
+      ${row("Status", w.heiss ? heatBadge(w) : w.stufe || w.stufe_gesperrt ? tierBadge(w) : `<span class="muted">normal</span>`)}
     </div>` : ""}</div>`;
 }
 
@@ -407,7 +443,11 @@ function fcfRendite(f, cur) {
   return letzte && letzte.fcf != null && f.marktkap && gleich && f.sektor !== "Financial Services" ? letzte.fcf / f.marktkap * 100 : null;
 }
 
+const relText = (r) => (r == null ? "" : r <= 0.8 ? "günstiger als üblich" : r >= 1.25 ? "teurer als üblich" : "im üblichen Rahmen");
+const relCls = (r) => (r == null ? "" : r <= 0.8 ? "pos" : r >= 1.25 ? "neg" : "");
+
 function valuationSection(w, f, cur) {
+  const vgl = f.bewertung_vergleich || {};
   const zTage = daysUntil(f.naechste_zahlen);
   const fcfR = fcfRendite(f, cur);
   const hinweis = (v) => { const u = kgvUrteil(v); return u ? ` <span class="small muted">${u[1]}</span>` : ""; };
@@ -424,10 +464,13 @@ function valuationSection(w, f, cur) {
       ${kv(term("gewinnwachstum", "Gewinnwachstum (ggü. Vorjahr)"), fmtRatio(f.gewinnwachstum), cls(f.gewinnwachstum))}
       ${kv(term("bruttomarge", "Bruttomarge"), fmtRatio(f.bruttomarge, 0))}
       ${kv(term("op_marge", "Operative Marge"), fmtRatio(f.operative_marge, 0), cls(f.operative_marge))}
+      ${kv(term("roic", "ROIC (Kapitalrendite)"), fmtRatio(f.roic, 0), cls(f.roic))}
       ${kv(term("ekr", "Eigenkapitalrendite"), fmtRatio(f.eigenkapitalrendite, 0), cls(f.eigenkapitalrendite))}
+      ${kv(term("kgv_vergleich", "KGV ggü. eigener Historie"), vgl.kgv_median_hist ? `${fmt(vgl.kgv_jetzt, 1)} statt ${fmt(vgl.kgv_median_hist, 1)} <span class="small muted">${relText(vgl.verhaeltnis_hist)}, Median ${vgl.hist_von}–${vgl.hist_bis}</span>` : "–", relCls(vgl.verhaeltnis_hist))}
+      ${kv(term("kgv_vergleich", "KGV erw. ggü. Branche"), vgl.branche_median ? `${fmt(vgl.kgv_erwartet, 1)} statt ${fmt(vgl.branche_median, 1)} <span class="small muted">${relText(vgl.verhaeltnis_branche)}, ${vgl.branche_n} Werte „${esc(vgl.branche)}“</span>` : "–", relCls(vgl.verhaeltnis_branche))}
       ${kv(term("dividende", "Dividendenrendite"), f.dividendenrendite != null ? fmt(f.dividendenrendite, 2) + " %" : "keine")}
-      ${kv(term("kursziel", "Analysten-Kursziel"), f.kursziel ? `${fmt(f.kursziel)} <span class="small ${cls(f.kursziel - w.kurs)}">${fmtPct((f.kursziel / w.kurs - 1) * 100, 0)}</span>` : "–")}
-      ${kv(term("konsens", "Analysten-Konsens"), `${esc(EMPFEHLUNG[f.analysten_empfehlung] || f.analysten_empfehlung || "–")} <span class="small muted">${f.analysten_anzahl ? f.analysten_anzahl + " Analysten" : ""}</span>`)}
+      ${kv(term("kursziel", "Analysten-Kursziel"), f.kursziel ? `${fmt(f.kursziel)} <span class="small ${cls(f.kursziel - w.kurs)}">${fmtPct((f.kursziel / w.kurs - 1) * 100, 0)}</span> <span class="small muted">geringe Aussagekraft</span>` : "–")}
+      ${kv(term("konsens", "Analysten-Konsens"), `${esc(EMPFEHLUNG[f.analysten_empfehlung] || f.analysten_empfehlung || "–")} <span class="small muted">${f.analysten_anzahl ? f.analysten_anzahl + " Analysten, " : ""}geringe Aussagekraft</span>`)}
       ${kv(f.berichtsrhythmus ? "Nächste Zahlen" : "Nächste Quartalszahlen", zTage != null && zTage >= 0 ? (f.naechste_zahlen_geschaetzt ? "ca. " : "") + date(f.naechste_zahlen) + ` <span class="small muted">in ${zTage} T.${f.naechste_zahlen_geschaetzt ? ", geschätzt" : ""}</span>` : "noch offen")}
       ${kv(term("eps", "Erwarteter EPS, nächstes Quartal"), f.erwartung_eps ? `${fmt(f.erwartung_eps)} <span class="small muted">${esc(cur)}</span>` : "–")}
     </div>
@@ -436,8 +479,8 @@ function valuationSection(w, f, cur) {
 }
 
 function priceSection(w, d) {
-  const naechste = OV.regeln.stufen.find((s) => s.ab_prozent > w.rueckgang_ath);
-  const kursNaechste = naechste ? w.ath * (1 - naechste.ab_prozent / 100) : null;
+  const naechste = OV.regeln.stufen.find((s) => s.ab_prozent > w.stufe_rueckgang);
+  const kursNaechste = naechste ? basisKurs(w) * (1 - naechste.ab_prozent / 100) : null;
   return `
     <div class="card">
       <div class="ranges" id="ranges">${RANGES.map(([r]) => {
@@ -445,28 +488,55 @@ function priceSection(w, d) {
         return `<button class="chip range" data-r="${r}"><span>${r}</span><small class="${cls(c)}">${c == null ? "–" : fmtPct(c, Math.abs(c) < 100 ? 1 : 0)}</small></button>`;
       }).join("")}</div>
       <div class="chart-box"><canvas id="cPrice"></canvas></div>
-      <p class="muted small" style="margin:8px 0 0">Gestrichelt: Allzeithoch und die Kurse, bei denen deine Stufen beginnen, soweit sie im gewählten Zeitraum liegen. Kurse älter als 2 Jahre sind Wochenkurse.</p>
+      <p class="muted small" style="margin:8px 0 0">Gestrichelt: ${w.stufe_basis === "ath" ? "Allzeithoch" : "Allzeithoch, 52-Wochen-Hoch"} und die Kurse, bei denen deine Stufen beginnen (gerechnet vom ${basisName(w)}), soweit sie im gewählten Zeitraum liegen. Kurse älter als 2 Jahre sind Wochenkurse.</p>
     </div>
     <div class="grid kv" style="margin-top:12px">
       ${kv(term("ath", "Rückgang vom Allzeithoch"), fmtPct(-w.rueckgang_ath), w.rueckgang_ath > 0.05 ? "neg" : "")}
-      ${kv(term("ath", "Allzeithoch"), `${fmt(w.ath)} <span class="small muted">${date(w.ath_datum)}</span>`)}
-      ${kv(term("stufe", "Kaufstufe"), tierBadge(w) + (w.zusatzkauf ? ` <span class="small">${fmt(w.zusatzkauf, 0)} ${esc(OV.regeln.waehrung_grundbetrag)}</span>` : ""))}
-      ${kv(term("stufe", "Nächste Stufe bei"), naechste ? `${fmt(kursNaechste)} <span class="small muted">(−${naechste.ab_prozent} %)</span>` : "höchste erreicht")}
       ${kv(term("w52", "vom 52-Wochen-Hoch"), fmtPct(-w.rueckgang_52w), w.rueckgang_52w > 0.05 ? "neg" : "")}
+      ${kv(term("rutsch", `Rückgang ${rutschTage()} Handelstage`), fmtPct(-w.rueckgang_kurz) + (w.kursrutsch ? " " + rutschBadge(w) : ""), w.rueckgang_kurz > 0.05 ? "neg" : "")}
+      ${kv(term("ath", "Allzeithoch"), `${fmt(w.ath)} <span class="small muted">${date(w.ath_datum)}</span>`)}
+      ${kv(term("stufe", `Kaufstufe (${basisKurz(w)})`), tierBadge(w) + (w.zusatzkauf ? ` <span class="small">${fmt(w.zusatzkauf, 0)} ${esc(OV.regeln.waehrung_grundbetrag)}</span>` : ""))}
+      ${kv(term("stufe", "Nächste Stufe bei"), naechste ? `${fmt(kursNaechste)} <span class="small muted">(−${naechste.ab_prozent} %)</span>` : "höchste erreicht")}
       ${kv("52-Wochen-Spanne", `${fmt(w.tief52)} – ${fmt(w.hoch52)}`)}
       ${kv(term("sma200", "Abstand 200-Tage-Linie"), fmtPct(w.abstand_sma200), cls(w.abstand_sma200))}
       ${kv(term("rsi", "RSI (14 Tage)"), `${fmt(w.rsi, 0)} <span class="small muted">${w.rsi >= 70 ? "überkauft" : w.rsi <= 30 ? "überverkauft" : "neutral"}</span>`)}
     </div>`;
 }
 
+function ampelBox(f) {
+  if (!f || !f.ampel) return "";
+  const q = f.quartale || [];
+  const jahrBasis = f.ampel.basis === "jahr";
+  return `<div class="card ampel-box"><span class="dot ${f.ampel.farbe}" style="width:16px;height:16px;margin-top:3px"></span>
+      <div><strong>${{ gruen: "Starkes", gelb: "Gemischtes", rot: "Schwaches" }[f.ampel.farbe]} ${jahrBasis ? "Geschäftsjahr" : "Quartal"}</strong>
+      <span class="muted small">(${term("ampel", "Ampel")}, ${jahrBasis ? `Geschäftsjahr ${f.ampel.jahr}` : `Quartal bis ${esc(date(q[q.length - 1].periode))}`})</span>
+      <ul class="clean small">${f.ampel.gruende.map((g) => `<li>${esc(g)}</li>`).join("")}</ul></div></div>`;
+}
+
+function urteilSection(w, f) {
+  const s = w.screen, b = s.bausteine || {};
+  const farbe = urteilFarbe(s.score);
+  return `
+    <div class="card urteil-box">
+      <div class="urteil-kopf">${urteilBadge(s.score, true)}
+        <div><strong>${URTEIL_TEXT[farbe]}</strong>
+        <div class="muted small">${term("score", "Gesamturteil")} von 100 aus ${Object.keys(b).length} Bausteinen mit je bis zu 20 Punkten</div></div></div>
+      ${miniBars(b)}
+      <div class="grid two">
+        <div><h3>Dafür spricht</h3>${(s.plus || []).length ? `<ul class="plus small">${s.plus.map((t) => `<li>${esc(t)}</li>`).join("")}</ul>` : `<p class="muted small">Nichts Auffälliges.</p>`}</div>
+        <div><h3>Dagegen spricht</h3>${(s.minus || []).length ? `<ul class="minus small">${s.minus.map((t) => `<li>${esc(t)}</li>`).join("")}</ul>` : `<p class="muted small">Nichts Auffälliges in den Zahlen. Risiken stehen unter „Unternehmen“.</p>`}</div>
+      </div>
+    </div>
+    <h3 class="sub-h">Woraus sich das Urteil zusammensetzt</h3>
+    ${ampelBox(f)}
+    ${f ? checkSection(f) : ""}
+    <p class="muted small">Das Urteil beschreibt die heutige Datenlage nach festen Regeln: Was es nicht sieht, sind Produkte, Wettbewerb und Management. Es ist keine Prognose und keine Kaufempfehlung.</p>`;
+}
+
 function businessSection(f, cur) {
   const q = f.quartale || [];
   const jahrBasis = f.ampel && f.ampel.basis === "jahr";
   return `
-    ${f.ampel ? `<div class="card ampel-box"><span class="dot ${f.ampel.farbe}" style="width:16px;height:16px;margin-top:3px"></span>
-      <div><strong>${{ gruen: "Starkes", gelb: "Gemischtes", rot: "Schwaches" }[f.ampel.farbe]} ${jahrBasis ? "Geschäftsjahr" : "Quartal"}</strong>
-      <span class="muted small">(${term("ampel", "Ampel")}, ${jahrBasis ? `Geschäftsjahr ${f.ampel.jahr}` : `Quartal bis ${esc(date(q[q.length - 1].periode))}`})</span>
-      <ul class="clean small">${f.ampel.gruende.map((g) => `<li>${esc(g)}</li>`).join("")}</ul></div></div>` : ""}
     ${f.berichtsrhythmus ? `<p class="muted small">${esc(f.berichtsrhythmus)}.${jahrBasis ? " Yahoo liefert hier keine Zwischenzahlen, deshalb bewertet die Ampel das letzte volle Geschäftsjahr und nicht das letzte Halbjahr." : ""}</p>` : ""}
     ${yearsSection(f, cur)}
     ${q.length ? `
@@ -484,8 +554,7 @@ function businessSection(f, cur) {
         <td class="${cls(e.nettogewinn)}">${big(e.nettogewinn)}</td><td>${fmt(e.eps)}</td>
         <td class="${cls(e.eps_yoy)}">${fmtPct(e.eps_yoy)}</td><td class="${cls(e.fcf)}">${big(e.fcf)}</td></tr>`).join("")}</tbody>
     </table></div>
-    <p class="muted small">Beträge in ${esc(f.bilanzwaehrung || cur)} laut Yahoo Finance. „vs. Vorjahr“ vergleicht mit demselben Quartal ein Jahr zuvor, „vs. Vorquartal“ mit dem Quartal direkt davor.</p>` : ""}
-    ${checkSection(f)}`;
+    <p class="muted small">Beträge in ${esc(f.bilanzwaehrung || cur)} laut Yahoo Finance. „vs. Vorjahr“ vergleicht mit demselben Quartal ein Jahr zuvor, „vs. Vorquartal“ mit dem Quartal direkt davor.</p>` : ""}`;
 }
 
 const PROFIL_GRUPPEN = [
@@ -664,9 +733,10 @@ function movesSection(d, w) {
     <div class="tbl-wrap"><table class="plain"><thead><tr><th>Investor</th><th>Wert</th><th>Anteil Depot</th><th>Veränderung</th><th>${term("stichtag", "Stichtag")}</th></tr></thead>
     <tbody>${halter.map(({ inv, p }) => `<tr><td class="wrap-text"><strong>${esc(inv.name)}</strong> <span class="sym">${esc(inv.person || "")}</span>${inv.kurz ? `<div class="sym">${esc(inv.kurz)}</div>` : ""}</td>
       <td>${big(p.wert)} $</td><td>${fmt(p.anteil, 1)} %</td><td>${changeBadge(p)}</td><td>${date(inv.stichtag)}</td></tr>`).join("")}</tbody></table></div>
-    <p class="muted small">„Veränderung“ vergleicht den Stichtag mit dem Vorquartal. Der Investor kann seitdem bereits gehandelt haben. Mehr über die Personen im Tab <a href="#/investoren">Investoren</a>.</p>` : "",
+    <p class="muted small">„Veränderung“ vergleicht den Stichtag mit dem Vorquartal. Der Investor kann seitdem bereits gehandelt haben. Aussagekräftig vor allem bei Investoren mit langen Haltedauern wie Berkshire, bei Hedgefonds mit vielen Umschichtungen ist der Stand oft schon überholt. Mehr über die Personen im Tab <a href="#/investoren">Investoren</a>.</p>` : "",
     insiderSection(d),
-    d.politiker && d.politiker.length ? `<h3 class="sub-h">${term("politiker", "Politiker-Trades (US-Kongress)")}</h3>${politikTable(d.politiker, false)}` : "",
+    d.politiker && d.politiker.length ? `<h3 class="sub-h">${term("politiker", "Politiker-Trades (US-Kongress)")}</h3>${politikTable(d.politiker, false)}
+    <p class="muted small"><strong>Geringe Aussagekraft:</strong> Studien finden für Kongressmitglieder seit dem STOCK Act (2012) im Schnitt keinen verlässlichen Vorsprung, und gemeldet wird bis zu 45 Tage später. Eher Hintergrund als Signal.</p>` : "",
   ].filter(Boolean);
   return teile.join("");
 }
@@ -677,7 +747,7 @@ function sourcesSection(w, f, p) {
       <li><strong>Kurse, Kennzahlen, Bilanzen, Management, Analysten:</strong> Yahoo Finance, automatisch mehrmals täglich. Für Yahoo gilt keine Garantie auf Richtigkeit, vor allem bei Werten außerhalb der USA.</li>
       ${usTicker && w.typ !== "etf" ? `<li><strong>Insider:</strong> SEC-Formular 4, über Yahoo Finance. <strong>Investoren:</strong> 13F-Meldungen direkt von SEC EDGAR. <strong>Politiker:</strong> STOCK-Act-Meldungen über die freie Bargo-API.</li>` : ""}
       ${p ? `<li><strong>Texte zu Geschäft, Risiken und Management:</strong> von Claude zusammengefasst aus Wissen bis etwa Mitte 2026 (Stand ${esc(p.stand || "–")}), nicht aus einem einzelnen Dokument und nicht live geprüft.</li>` : ""}
-      <li><strong>Ampel, Check, Stufen, Daten-Score:</strong> feste Regeln dieses Tools, berechnet aus den Zahlen oben.</li>
+      <li><strong>Gesamturteil (mit Ampel und Kennzahlen-Check), Kaufstufen, Kursrutsch:</strong> feste Regeln dieses Tools, berechnet aus den Zahlen oben. Der Branchenvergleich nutzt alle Werte aus Watchlist und „Entdecken“.</li>
     </ul></div>
     ${f && f.beschreibung ? `<div class="card" style="margin-top:12px"><h3>Offizielle Kurzbeschreibung <span class="muted small">(Yahoo, englisch)</span></h3><div class="desc small" id="desc">${esc(f.beschreibung)}</div>
       <button class="chip" id="more" style="margin-top:8px">Mehr anzeigen</button></div>` : ""}
@@ -748,8 +818,9 @@ function drawPrice(d, range) {
   }];
   if (!kurz || passt(w.ath)) ds.push(line(w.ath, "Allzeithoch", css("--muted")));
   const colors = ["--t1-text", "--t2-text", "--t3-text", "--t4-text", "--t5-text"];
+  if (w.stufe_basis === "52w" && w.hoch52 < w.ath && passt(w.hoch52)) ds.push(line(w.hoch52, "52-Wochen-Hoch", css("--muted")));
   OV.regeln.stufen.forEach((s, i) => {
-    const y = w.ath * (1 - s.ab_prozent / 100);
+    const y = basisKurs(w) * (1 - s.ab_prozent / 100);
     if (passt(y)) ds.push(line(y, `${s.name} (−${s.ab_prozent} %)`, css(colors[Math.min(i, 4)])));
   });
   const span = maxP - minP;
@@ -903,7 +974,7 @@ function renderInvestors() {
 const entState = { lens: store.get("entLens", "alle"), kat: "Alle", thema: "Alle", nurNeu: store.get("entNeu", true), q: "", n: 24 };
 const m = (x, k) => (x.m ? x.m[k] : null);
 const LENSES = [
-  { id: "alle", label: "Höchster Score", info: "Alle Werte, sortiert nach Daten-Score.", test: () => true },
+  { id: "alle", label: "Bestes Urteil", info: "Alle Werte, sortiert nach Gesamturteil.", test: () => true },
   { id: "qualitaet", label: "Wachstum & Qualität", info: "Umsatz wächst mindestens 10 %, operative Marge mindestens 15 %.", test: (x) => m(x, "umsatzwachstum") >= 10 && m(x, "op_marge") >= 15 },
   { id: "ruecksetzer", label: "Gute Zahlen, gefallener Kurs", info: "Mindestens 20 % unter dem Allzeithoch, aber Umsatz wächst mindestens 5 % und das Geschäft ist profitabel. Der Kurs kann trotzdem einen guten Grund haben.", test: (x) => x.rueckgang_ath >= 20 && m(x, "umsatzwachstum") >= 5 && m(x, "op_marge") > 0 },
   { id: "guenstig", label: "Günstig bewertet", info: "Erwartetes KGV bis 20 oder PEG bis 1,2, dazu Umsatz nicht schrumpfend.", test: (x) => m(x, "umsatzwachstum") >= 0 && ((m(x, "kgv_erwartet") > 0 && m(x, "kgv_erwartet") <= 20) || (m(x, "peg") > 0 && m(x, "peg") <= 1.2)) },
@@ -911,7 +982,8 @@ const LENSES = [
   { id: "dividende", label: "Dividende", info: "Dividendenrendite mindestens 2,5 %, profitables Geschäft.", test: (x) => m(x, "dividende") >= 2.5 && m(x, "op_marge") > 0 },
   { id: "unbekannt", label: "Weniger bekannt", info: "Unternehmen, die viele Privatanleger kaum kennen.", test: (x) => x.bekannt === false },
 ];
-const BAUSTEINE = [["wachstum", "Wachstum"], ["profit", "Marge"], ["bewertung", "Bewertung"], ["trend", "Trend"], ["bilanz", "Bilanz"]];
+const BAUSTEINE = [["wachstum", "Wachstum"], ["profit", "Qualität"], ["bewertung", "Bewertung"], ["bilanz", "Bilanz"], ["trend", "Trend"], ["zahlen", "Letzte Zahlen"], ["langfrist", "Langfristig"]];
+const miniBars = (b) => `<div class="mini-bars">${BAUSTEINE.filter(([k]) => b[k] != null).map(([k, l]) => `<div class="mini"><span>${l}</span><i class="meter"><b style="width:${b[k] * 5}%"></b></i></div>`).join("")}</div>`;
 
 function ideaCard(x) {
   const addUrl = ideeAddUrl(x);
@@ -921,17 +993,17 @@ function ideaCard(x) {
       <div><h3><a href="#/wert/${encodeURIComponent(x.symbol)}">${esc(x.name)}</a>
         ${x.in_watchlist ? `<span class="badge watch">Watchlist</span>` : x.bekannt === false ? `<span class="badge">wenig bekannt</span>` : ""}</h3>
         <div class="sym">${esc(x.symbol)} · ${esc(x.kategorie)}${x.thema ? " · " + esc(x.thema) : ""}</div></div>
-      <div class="score" title="Daten-Score von 100">${x.score == null ? "–" : x.score}</div>
+      ${urteilBadge(x.score, true)}
     </div>
     ${x.kurz ? `<p class="small" style="margin:8px 0">${esc(x.kurz)}</p>` : ""}
-    <div class="mini-bars">${BAUSTEINE.map(([k, l]) => `<div class="mini"><span>${l}</span><i class="meter"><b style="width:${b[k] == null ? 0 : b[k] * 5}%"></b></i></div>`).join("")}</div>
+    ${miniBars(b)}
     <div class="fakten small">
       <span>Umsatz <b class="${cls(m(x, "umsatzwachstum"))}">${fmtPct(m(x, "umsatzwachstum"), 0)}</b></span>
       <span>Op. Marge <b>${m(x, "op_marge") == null ? "–" : fmt(m(x, "op_marge"), 0) + " %"}</b></span>
       <span>KGV erw. <b>${fmt(m(x, "kgv_erwartet"), 1)}</b></span>
       <span>vom ATH <b class="neg">${fmtPct(-x.rueckgang_ath, 0)}</b></span>
       <span>6 Mon. <b class="${cls(x.perf_6m)}">${fmtPct(x.perf_6m, 0)}</b></span>
-      <span>Analysten <b>${esc(EMPFEHLUNG[x.analysten] || "–")}</b></span>
+      <span>ROIC <b>${m(x, "roic") == null ? "–" : fmt(m(x, "roic"), 0) + " %"}</b></span>
     </div>
     ${(x.plus || []).length ? `<ul class="plus small">${x.plus.slice(0, 3).map((t) => `<li>${esc(t)}</li>`).join("")}</ul>` : ""}
     ${(x.minus || []).length ? `<ul class="minus small">${x.minus.slice(0, 3).map((t) => `<li>${esc(t)}</li>`).join("")}</ul>` : ""}
@@ -964,8 +1036,8 @@ function renderEntdecken() {
   const opt = (a, sel) => ["Alle", ...a].map((k) => `<option ${k === sel ? "selected" : ""}>${esc(k)}</option>`).join("");
   $app.innerHTML = `
     <h1>Entdecken</h1>
-    <p class="muted prose">Ideen für die weitere Recherche, nach festen Regeln aus aktuellen Zahlen gefiltert. Jeder Wert bekommt einen ${term("score", "Daten-Score")} aus Wachstum, Marge, Bewertung, Kurstrend und Bilanz. Dazu stehen immer auch die Gegenargumente.</p>
-    <div class="note small"><strong>Das sind keine Kaufempfehlungen.</strong> Claude ist kein zugelassener Anlageberater und kennt deine finanzielle Situation nicht. Der Score zeigt, wie die Zahlen heute aussehen, nicht wie die Aktie künftig läuft. Die Thesen sind Vermutungen, die falsch sein können.</div>
+    <p class="muted prose">Ideen für die weitere Recherche, nach festen Regeln aus aktuellen Zahlen gefiltert. Jeder Wert bekommt ein ${term("score", "Gesamturteil")} aus Wachstum, Qualität, Bewertung (auch im Vergleich zur eigenen Geschichte und zur Branche), Bilanz, Kurstrend, den letzten Zahlen und der langfristigen Entwicklung. Dazu stehen immer auch die Gegenargumente.</p>
+    <div class="note small"><strong>Das sind keine Kaufempfehlungen.</strong> Claude ist kein zugelassener Anlageberater und kennt deine finanzielle Situation nicht. Das Urteil zeigt, wie die Zahlen heute aussehen, nicht wie die Aktie künftig läuft. Die Thesen sind Vermutungen, die falsch sein können.</div>
     <div class="toolbar">${LENSES.map((l) => `<button class="chip ${l.id === entState.lens ? "on" : ""}" data-lens="${l.id}">${l.label}</button>`).join("")}</div>
     <div class="toolbar">
       <input type="search" id="entQ" placeholder="Suchen: Name, Branche, Thema …" value="${esc(entState.q)}">
@@ -1023,7 +1095,7 @@ function renderRules() {
     <h1>Deine Kaufregeln</h1>
     <p>Lege fest, wie viel du in jeder Stufe zusätzlich investieren möchtest. Die Beträge werden sofort überall in der App übernommen und nur auf diesem Gerät gespeichert.</p>
     <div class="tbl-wrap"><table class="plain betrag-tab">
-      <thead><tr><th>Stufe</th><th>Rückgang vom Allzeithoch</th><th>Betrag ETF (${cur})</th><th>Betrag Aktie (${cur})</th></tr></thead>
+      <thead><tr><th>Stufe</th><th>Rückgang (ETF: vom Allzeithoch, Aktie: vom 52-Wochen-Hoch)</th><th>Betrag ETF (${cur})</th><th>Betrag Aktie (${cur})</th></tr></thead>
       <tbody>${r.stufen.map((s, i) => `<tr><td><span class="tier tier-${i + 1}">${esc(s.name)}</span></td>
         <td>ab −${s.ab_prozent} %</td>
         <td><input class="betrag" inputmode="decimal" data-typ="etf" data-i="${i}" value="${b.etf[i]}" aria-label="${esc(s.name)} Betrag ETF"></td>

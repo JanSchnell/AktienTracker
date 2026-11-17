@@ -1,5 +1,5 @@
 {
-  "_hinweis": "Kaufstufen nach Rückgang vom Allzeithoch (Schlusskurs). 'ab_prozent' = Mindest-Rückgang. 'faktor' multipliziert den Grundbetrag. Beispielwerte – passe sie an deine eigene Strategie an.",
+  "_hinweis": "Kaufstufen nach Rückgang (Schlusskurs): ETFs vom Allzeithoch, Aktien vom 52-Wochen-Hoch. Bei Aktien mit roter Ampel (schwache Zahlen) gibt es keine Stufe. 'ab_prozent' = Mindest-Rückgang. 'faktor' multipliziert den Grundbetrag. Beispielwerte – passe sie an deine eigene Strategie an.",
   "grundbetrag": {
     "etf": 100,
     "aktie": 50
@@ -12,6 +12,8 @@
     { "ab_prozent": 40, "faktor": 4, "name": "Stufe 4" },
     { "ab_prozent": 50, "faktor": 5, "name": "Stufe 5" }
   ],
+  "_hinweis_kursrutsch": "Nur Hinweis in der App, kein Telegram: Kurs mindestens so viele Prozent unter dem höchsten Schlusskurs der letzten 'handelstage' Handelstage.",
+  "kursrutsch": { "handelstage": 10, "aktie": 10, "etf": 5 },
   "_hinweis_ueberhitzung": "Hinweis (kein Verkaufssignal!), wenn ein Wert weit über seiner 200-Tage-Linie liegt oder der RSI(14) sehr hoch ist. Werte in Prozent Abstand zur 200-Tage-Linie: [heiß, sehr heiß].",
   "ueberhitzung": {
     "aktie": { "abstand_sma200": [30, 50] },
