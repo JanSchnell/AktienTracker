@@ -1,102 +1,503 @@
 {
   "_hinweis": "Ticker-Symbole wie auf finance.yahoo.com. Deutsche Börse = .DE, Amsterdam = .AS, Paris = .PA, Kopenhagen = .CO, Madrid = .MC. US-Aktien ohne Endung. 'typ' ist 'etf' oder 'aktie' (bestimmt, welcher Grundbetrag aus rules.json gilt).",
   "werte": [
-    { "symbol": "SXR8.DE",   "name": "iShares Core S&P 500",            "typ": "etf",   "kategorie": "ETF" },
-    { "symbol": "EUNL.DE",   "name": "iShares Core MSCI World",         "typ": "etf",   "kategorie": "ETF" },
-    { "symbol": "IS3N.DE",   "name": "iShares Core MSCI EM IMI",        "typ": "etf",   "kategorie": "ETF" },
-    { "symbol": "EXSA.DE",   "name": "iShares STOXX Europe 600",        "typ": "etf",   "kategorie": "ETF" },
-    { "symbol": "EQQQ.DE",   "name": "Invesco Nasdaq-100",              "typ": "etf",   "kategorie": "ETF" },
-
-    { "symbol": "AAPL",      "name": "Apple",                           "typ": "aktie", "kategorie": "Big Tech & Plattformen" },
-    { "symbol": "MSFT",      "name": "Microsoft",                       "typ": "aktie", "kategorie": "Big Tech & Plattformen" },
-    { "symbol": "GOOGL",     "name": "Alphabet",                        "typ": "aktie", "kategorie": "Big Tech & Plattformen" },
-    { "symbol": "AMZN",      "name": "Amazon",                          "typ": "aktie", "kategorie": "Big Tech & Plattformen" },
-    { "symbol": "META",      "name": "Meta Platforms",                  "typ": "aktie", "kategorie": "Big Tech & Plattformen" },
-    { "symbol": "MELI",      "name": "MercadoLibre",                    "typ": "aktie", "kategorie": "Big Tech & Plattformen" },
-
-    { "symbol": "NVDA",      "name": "Nvidia",                          "typ": "aktie", "kategorie": "Halbleiter" },
-    { "symbol": "TSM",       "name": "TSMC",                            "typ": "aktie", "kategorie": "Halbleiter" },
-    { "symbol": "ASML.AS",   "name": "ASML",                            "typ": "aktie", "kategorie": "Halbleiter" },
-    { "symbol": "AMD",       "name": "AMD",                             "typ": "aktie", "kategorie": "Halbleiter" },
-    { "symbol": "AVGO",      "name": "Broadcom",                        "typ": "aktie", "kategorie": "Halbleiter" },
-    { "symbol": "IFX.DE",    "name": "Infineon",                        "typ": "aktie", "kategorie": "Halbleiter" },
-    { "symbol": "MU",        "name": "Micron Technology",               "typ": "aktie", "kategorie": "Halbleiter" },
-
-    { "symbol": "VRT",       "name": "Vertiv",                          "typ": "aktie", "kategorie": "KI-Infrastruktur" },
-    { "symbol": "ANET",      "name": "Arista Networks",                 "typ": "aktie", "kategorie": "KI-Infrastruktur" },
-    { "symbol": "GEV",       "name": "GE Vernova",                      "typ": "aktie", "kategorie": "KI-Infrastruktur" },
-    { "symbol": "000660.KS", "name": "SK Hynix",                        "typ": "aktie", "kategorie": "KI-Infrastruktur" },
-    { "symbol": "LRCX",      "name": "Lam Research",                    "typ": "aktie", "kategorie": "KI-Infrastruktur" },
-    { "symbol": "MRVL",      "name": "Marvell Technology",              "typ": "aktie", "kategorie": "KI-Infrastruktur" },
-    { "symbol": "CLS",       "name": "Celestica",                       "typ": "aktie", "kategorie": "KI-Infrastruktur" },
-
-    { "symbol": "SAP.DE",    "name": "SAP",                             "typ": "aktie", "kategorie": "Software & Cybersecurity" },
-    { "symbol": "ORCL",      "name": "Oracle",                          "typ": "aktie", "kategorie": "Software & Cybersecurity" },
-    { "symbol": "CRM",       "name": "Salesforce",                      "typ": "aktie", "kategorie": "Software & Cybersecurity" },
-    { "symbol": "NOW",       "name": "ServiceNow",                      "typ": "aktie", "kategorie": "Software & Cybersecurity" },
-    { "symbol": "PLTR",      "name": "Palantir",                        "typ": "aktie", "kategorie": "Software & Cybersecurity" },
-    { "symbol": "CRWD",      "name": "CrowdStrike",                     "typ": "aktie", "kategorie": "Software & Cybersecurity" },
-
-    { "symbol": "ALV.DE",    "name": "Allianz",                         "typ": "aktie", "kategorie": "Banken & Versicherungen" },
-    { "symbol": "MUV2.DE",   "name": "Munich Re",                       "typ": "aktie", "kategorie": "Banken & Versicherungen" },
-    { "symbol": "JPM",       "name": "JPMorgan Chase",                  "typ": "aktie", "kategorie": "Banken & Versicherungen" },
-    { "symbol": "GS",        "name": "Goldman Sachs",                   "typ": "aktie", "kategorie": "Banken & Versicherungen" },
-
-    { "symbol": "V",         "name": "Visa",                            "typ": "aktie", "kategorie": "Zahlungen & Fintech" },
-    { "symbol": "MA",        "name": "Mastercard",                      "typ": "aktie", "kategorie": "Zahlungen & Fintech" },
-    { "symbol": "AXP"       , "name": "American Express"                , "typ": "aktie", "kategorie": "Zahlungen & Fintech" },
-    { "symbol": "ADYEN.AS"  , "name": "Adyen"                           , "typ": "aktie", "kategorie": "Zahlungen & Fintech" },
-
-    { "symbol": "LLY",       "name": "Eli Lilly",                       "typ": "aktie", "kategorie": "Gesundheit & Pharma" },
-    { "symbol": "NOVO-B.CO", "name": "Novo Nordisk",                    "typ": "aktie", "kategorie": "Gesundheit & Pharma" },
-    { "symbol": "JNJ",       "name": "Johnson & Johnson",               "typ": "aktie", "kategorie": "Gesundheit & Pharma" },
-    { "symbol": "ISRG",      "name": "Intuitive Surgical",              "typ": "aktie", "kategorie": "Gesundheit & Pharma" },
-
-    { "symbol": "MC.PA",     "name": "LVMH",                            "typ": "aktie", "kategorie": "Konsum & Luxus" },
-    { "symbol": "KO",        "name": "Coca-Cola",                       "typ": "aktie", "kategorie": "Konsum & Luxus" },
-    { "symbol": "COST",      "name": "Costco",                          "typ": "aktie", "kategorie": "Konsum & Luxus" },
-    { "symbol": "WMT"       , "name": "Walmart"                         , "typ": "aktie", "kategorie": "Konsum & Luxus" },
-    { "symbol": "PG"        , "name": "Procter & Gamble"                , "typ": "aktie", "kategorie": "Konsum & Luxus" },
-
-    { "symbol": "TSLA",      "name": "Tesla",                           "typ": "aktie", "kategorie": "Auto & Mobilität" },
-    { "symbol": "UBER",      "name": "Uber",                            "typ": "aktie", "kategorie": "Auto & Mobilität" },
-    { "symbol": "7203.T"    , "name": "Toyota"                          , "typ": "aktie", "kategorie": "Auto & Mobilität" },
-    { "symbol": "BMW.DE"    , "name": "BMW"                             , "typ": "aktie", "kategorie": "Auto & Mobilität" },
-    { "symbol": "RACE"      , "name": "Ferrari"                         , "typ": "aktie", "kategorie": "Auto & Mobilität" },
-
-    { "symbol": "SIE.DE",    "name": "Siemens",                         "typ": "aktie", "kategorie": "Industrie & Automatisierung" },
-    { "symbol": "SU.PA",     "name": "Schneider Electric",              "typ": "aktie", "kategorie": "Industrie & Automatisierung" },
-    { "symbol": "6861.T",    "name": "Keyence",                         "typ": "aktie", "kategorie": "Industrie & Automatisierung" },
-    { "symbol": "CAT",       "name": "Caterpillar",                     "typ": "aktie", "kategorie": "Industrie & Automatisierung" },
-
-    { "symbol": "ENR.DE",    "name": "Siemens Energy",                  "typ": "aktie", "kategorie": "Energie & Versorger" },
-    { "symbol": "IBE.MC",    "name": "Iberdrola",                       "typ": "aktie", "kategorie": "Energie & Versorger" },
-    { "symbol": "NEE",       "name": "NextEra Energy",                  "typ": "aktie", "kategorie": "Energie & Versorger" },
-    { "symbol": "SHEL.L",    "name": "Shell",                           "typ": "aktie", "kategorie": "Energie & Versorger" },
-
-    { "symbol": "RR.L",      "name": "Rolls-Royce",                     "typ": "aktie", "kategorie": "Luft-, Raumfahrt & Rüstung" },
-    { "symbol": "SPCX",      "name": "SpaceX",                          "typ": "aktie", "kategorie": "Luft-, Raumfahrt & Rüstung" },
-    { "symbol": "RHM.DE",    "name": "Rheinmetall",                     "typ": "aktie", "kategorie": "Luft-, Raumfahrt & Rüstung" },
-    { "symbol": "AIR.PA",    "name": "Airbus",                          "typ": "aktie", "kategorie": "Luft-, Raumfahrt & Rüstung" },
-    { "symbol": "GE"        , "name": "GE Aerospace"                    , "typ": "aktie", "kategorie": "Luft-, Raumfahrt & Rüstung" },
-    { "symbol": "RTX"       , "name": "RTX"                             , "typ": "aktie", "kategorie": "Luft-, Raumfahrt & Rüstung" },
-    { "symbol": "LMT"       , "name": "Lockheed Martin"                 , "typ": "aktie", "kategorie": "Luft-, Raumfahrt & Rüstung" },
-    { "symbol": "SAF.PA"    , "name": "Safran"                          , "typ": "aktie", "kategorie": "Luft-, Raumfahrt & Rüstung" },
-    { "symbol": "BA.L"      , "name": "BAE Systems"                     , "typ": "aktie", "kategorie": "Luft-, Raumfahrt & Rüstung" },
-
-    { "symbol": "LIN",       "name": "Linde",                           "typ": "aktie", "kategorie": "Rohstoffe & Chemie" },
-    { "symbol": "FCX",       "name": "Freeport-McMoRan",                "typ": "aktie", "kategorie": "Rohstoffe & Chemie" },
-    { "symbol": "AI.PA"     , "name": "Air Liquide"                     , "typ": "aktie", "kategorie": "Rohstoffe & Chemie" },
-    { "symbol": "RIO.L"     , "name": "Rio Tinto"                       , "typ": "aktie", "kategorie": "Rohstoffe & Chemie" },
-
-    { "symbol": "NFLX",      "name": "Netflix",                         "typ": "aktie", "kategorie": "Telekom & Medien" },
-    { "symbol": "DTE.DE",    "name": "Deutsche Telekom",                "typ": "aktie", "kategorie": "Telekom & Medien" },
-    { "symbol": "TMUS"      , "name": "T-Mobile US"                     , "typ": "aktie", "kategorie": "Telekom & Medien" },
-    { "symbol": "DIS"       , "name": "Walt Disney"                     , "typ": "aktie", "kategorie": "Telekom & Medien" },
-
-    { "symbol": "PLD",       "name": "Prologis",                        "typ": "aktie", "kategorie": "Immobilien & Logistik" },
-    { "symbol": "UNP",       "name": "Union Pacific",                   "typ": "aktie", "kategorie": "Immobilien & Logistik" },
-    { "symbol": "AMT"       , "name": "American Tower"                  , "typ": "aktie", "kategorie": "Immobilien & Logistik" },
-    { "symbol": "DHL.DE"    , "name": "DHL Group"                       , "typ": "aktie", "kategorie": "Immobilien & Logistik" }
+    {
+      "symbol": "SXR8.DE",
+      "name": "iShares Core S&P 500",
+      "typ": "etf",
+      "kategorie": "ETF"
+    },
+    {
+      "symbol": "EUNL.DE",
+      "name": "iShares Core MSCI World",
+      "typ": "etf",
+      "kategorie": "ETF"
+    },
+    {
+      "symbol": "IS3N.DE",
+      "name": "iShares Core MSCI EM IMI",
+      "typ": "etf",
+      "kategorie": "ETF"
+    },
+    {
+      "symbol": "EXSA.DE",
+      "name": "iShares STOXX Europe 600",
+      "typ": "etf",
+      "kategorie": "ETF"
+    },
+    {
+      "symbol": "EQQQ.DE",
+      "name": "Invesco Nasdaq-100",
+      "typ": "etf",
+      "kategorie": "ETF"
+    },
+    {
+      "symbol": "AAPL",
+      "name": "Apple",
+      "typ": "aktie",
+      "kategorie": "Big Tech & Plattformen"
+    },
+    {
+      "symbol": "MSFT",
+      "name": "Microsoft",
+      "typ": "aktie",
+      "kategorie": "Big Tech & Plattformen"
+    },
+    {
+      "symbol": "GOOGL",
+      "name": "Alphabet",
+      "typ": "aktie",
+      "kategorie": "Big Tech & Plattformen"
+    },
+    {
+      "symbol": "AMZN",
+      "name": "Amazon",
+      "typ": "aktie",
+      "kategorie": "Big Tech & Plattformen"
+    },
+    {
+      "symbol": "META",
+      "name": "Meta Platforms",
+      "typ": "aktie",
+      "kategorie": "Big Tech & Plattformen"
+    },
+    {
+      "symbol": "MELI",
+      "name": "MercadoLibre",
+      "typ": "aktie",
+      "kategorie": "Big Tech & Plattformen"
+    },
+    {
+      "symbol": "NVDA",
+      "name": "Nvidia",
+      "typ": "aktie",
+      "kategorie": "Halbleiter"
+    },
+    {
+      "symbol": "TSM",
+      "name": "TSMC",
+      "typ": "aktie",
+      "kategorie": "Halbleiter"
+    },
+    {
+      "symbol": "ASML.AS",
+      "name": "ASML",
+      "typ": "aktie",
+      "kategorie": "Halbleiter"
+    },
+    {
+      "symbol": "AMD",
+      "name": "AMD",
+      "typ": "aktie",
+      "kategorie": "Halbleiter"
+    },
+    {
+      "symbol": "AVGO",
+      "name": "Broadcom",
+      "typ": "aktie",
+      "kategorie": "Halbleiter"
+    },
+    {
+      "symbol": "IFX.DE",
+      "name": "Infineon",
+      "typ": "aktie",
+      "kategorie": "Halbleiter"
+    },
+    {
+      "symbol": "MU",
+      "name": "Micron Technology",
+      "typ": "aktie",
+      "kategorie": "Halbleiter"
+    },
+    {
+      "symbol": "VRT",
+      "name": "Vertiv",
+      "typ": "aktie",
+      "kategorie": "KI-Infrastruktur"
+    },
+    {
+      "symbol": "ANET",
+      "name": "Arista Networks",
+      "typ": "aktie",
+      "kategorie": "KI-Infrastruktur"
+    },
+    {
+      "symbol": "GEV",
+      "name": "GE Vernova",
+      "typ": "aktie",
+      "kategorie": "KI-Infrastruktur"
+    },
+    {
+      "symbol": "000660.KS",
+      "name": "SK Hynix",
+      "typ": "aktie",
+      "kategorie": "KI-Infrastruktur"
+    },
+    {
+      "symbol": "LRCX",
+      "name": "Lam Research",
+      "typ": "aktie",
+      "kategorie": "KI-Infrastruktur"
+    },
+    {
+      "symbol": "MRVL",
+      "name": "Marvell Technology",
+      "typ": "aktie",
+      "kategorie": "KI-Infrastruktur"
+    },
+    {
+      "symbol": "CLS",
+      "name": "Celestica",
+      "typ": "aktie",
+      "kategorie": "KI-Infrastruktur"
+    },
+    {
+      "symbol": "SAP.DE",
+      "name": "SAP",
+      "typ": "aktie",
+      "kategorie": "Software & Cybersecurity"
+    },
+    {
+      "symbol": "ORCL",
+      "name": "Oracle",
+      "typ": "aktie",
+      "kategorie": "Software & Cybersecurity"
+    },
+    {
+      "symbol": "CRM",
+      "name": "Salesforce",
+      "typ": "aktie",
+      "kategorie": "Software & Cybersecurity"
+    },
+    {
+      "symbol": "NOW",
+      "name": "ServiceNow",
+      "typ": "aktie",
+      "kategorie": "Software & Cybersecurity"
+    },
+    {
+      "symbol": "PLTR",
+      "name": "Palantir",
+      "typ": "aktie",
+      "kategorie": "Software & Cybersecurity"
+    },
+    {
+      "symbol": "CRWD",
+      "name": "CrowdStrike",
+      "typ": "aktie",
+      "kategorie": "Software & Cybersecurity"
+    },
+    {
+      "symbol": "ALV.DE",
+      "name": "Allianz",
+      "typ": "aktie",
+      "kategorie": "Banken & Versicherungen"
+    },
+    {
+      "symbol": "MUV2.DE",
+      "name": "Munich Re",
+      "typ": "aktie",
+      "kategorie": "Banken & Versicherungen"
+    },
+    {
+      "symbol": "JPM",
+      "name": "JPMorgan Chase",
+      "typ": "aktie",
+      "kategorie": "Banken & Versicherungen"
+    },
+    {
+      "symbol": "GS",
+      "name": "Goldman Sachs",
+      "typ": "aktie",
+      "kategorie": "Banken & Versicherungen"
+    },
+    {
+      "symbol": "V",
+      "name": "Visa",
+      "typ": "aktie",
+      "kategorie": "Zahlungen & Fintech"
+    },
+    {
+      "symbol": "MA",
+      "name": "Mastercard",
+      "typ": "aktie",
+      "kategorie": "Zahlungen & Fintech"
+    },
+    {
+      "symbol": "AXP",
+      "name": "American Express",
+      "typ": "aktie",
+      "kategorie": "Zahlungen & Fintech"
+    },
+    {
+      "symbol": "ADYEN.AS",
+      "name": "Adyen",
+      "typ": "aktie",
+      "kategorie": "Zahlungen & Fintech"
+    },
+    {
+      "symbol": "LLY",
+      "name": "Eli Lilly",
+      "typ": "aktie",
+      "kategorie": "Gesundheit & Pharma"
+    },
+    {
+      "symbol": "NOVO-B.CO",
+      "name": "Novo Nordisk",
+      "typ": "aktie",
+      "kategorie": "Gesundheit & Pharma"
+    },
+    {
+      "symbol": "JNJ",
+      "name": "Johnson & Johnson",
+      "typ": "aktie",
+      "kategorie": "Gesundheit & Pharma"
+    },
+    {
+      "symbol": "ISRG",
+      "name": "Intuitive Surgical",
+      "typ": "aktie",
+      "kategorie": "Gesundheit & Pharma"
+    },
+    {
+      "symbol": "MC.PA",
+      "name": "LVMH",
+      "typ": "aktie",
+      "kategorie": "Konsum & Luxus"
+    },
+    {
+      "symbol": "KO",
+      "name": "Coca-Cola",
+      "typ": "aktie",
+      "kategorie": "Konsum & Luxus"
+    },
+    {
+      "symbol": "COST",
+      "name": "Costco",
+      "typ": "aktie",
+      "kategorie": "Konsum & Luxus"
+    },
+    {
+      "symbol": "WMT",
+      "name": "Walmart",
+      "typ": "aktie",
+      "kategorie": "Konsum & Luxus"
+    },
+    {
+      "symbol": "PG",
+      "name": "Procter & Gamble",
+      "typ": "aktie",
+      "kategorie": "Konsum & Luxus"
+    },
+    {
+      "symbol": "TSLA",
+      "name": "Tesla",
+      "typ": "aktie",
+      "kategorie": "Auto & Mobilität"
+    },
+    {
+      "symbol": "UBER",
+      "name": "Uber",
+      "typ": "aktie",
+      "kategorie": "Auto & Mobilität"
+    },
+    {
+      "symbol": "7203.T",
+      "name": "Toyota",
+      "typ": "aktie",
+      "kategorie": "Auto & Mobilität"
+    },
+    {
+      "symbol": "BMW.DE",
+      "name": "BMW",
+      "typ": "aktie",
+      "kategorie": "Auto & Mobilität"
+    },
+    {
+      "symbol": "RACE",
+      "name": "Ferrari",
+      "typ": "aktie",
+      "kategorie": "Auto & Mobilität"
+    },
+    {
+      "symbol": "SIE.DE",
+      "name": "Siemens",
+      "typ": "aktie",
+      "kategorie": "Industrie & Automatisierung"
+    },
+    {
+      "symbol": "SU.PA",
+      "name": "Schneider Electric",
+      "typ": "aktie",
+      "kategorie": "Industrie & Automatisierung"
+    },
+    {
+      "symbol": "6861.T",
+      "name": "Keyence",
+      "typ": "aktie",
+      "kategorie": "Industrie & Automatisierung"
+    },
+    {
+      "symbol": "CAT",
+      "name": "Caterpillar",
+      "typ": "aktie",
+      "kategorie": "Industrie & Automatisierung"
+    },
+    {
+      "symbol": "ENR.DE",
+      "name": "Siemens Energy",
+      "typ": "aktie",
+      "kategorie": "Energie & Versorger"
+    },
+    {
+      "symbol": "IBE.MC",
+      "name": "Iberdrola",
+      "typ": "aktie",
+      "kategorie": "Energie & Versorger"
+    },
+    {
+      "symbol": "NEE",
+      "name": "NextEra Energy",
+      "typ": "aktie",
+      "kategorie": "Energie & Versorger"
+    },
+    {
+      "symbol": "SHEL.L",
+      "name": "Shell",
+      "typ": "aktie",
+      "kategorie": "Energie & Versorger"
+    },
+    {
+      "symbol": "RR.L",
+      "name": "Rolls-Royce",
+      "typ": "aktie",
+      "kategorie": "Luft-, Raumfahrt & Rüstung"
+    },
+    {
+      "symbol": "SPCX",
+      "name": "SpaceX",
+      "typ": "aktie",
+      "kategorie": "Luft-, Raumfahrt & Rüstung"
+    },
+    {
+      "symbol": "RHM.DE",
+      "name": "Rheinmetall",
+      "typ": "aktie",
+      "kategorie": "Luft-, Raumfahrt & Rüstung"
+    },
+    {
+      "symbol": "AIR.PA",
+      "name": "Airbus",
+      "typ": "aktie",
+      "kategorie": "Luft-, Raumfahrt & Rüstung"
+    },
+    {
+      "symbol": "GE",
+      "name": "GE Aerospace",
+      "typ": "aktie",
+      "kategorie": "Luft-, Raumfahrt & Rüstung"
+    },
+    {
+      "symbol": "RTX",
+      "name": "RTX",
+      "typ": "aktie",
+      "kategorie": "Luft-, Raumfahrt & Rüstung"
+    },
+    {
+      "symbol": "LMT",
+      "name": "Lockheed Martin",
+      "typ": "aktie",
+      "kategorie": "Luft-, Raumfahrt & Rüstung"
+    },
+    {
+      "symbol": "SAF.PA",
+      "name": "Safran",
+      "typ": "aktie",
+      "kategorie": "Luft-, Raumfahrt & Rüstung"
+    },
+    {
+      "symbol": "BA.L",
+      "name": "BAE Systems",
+      "typ": "aktie",
+      "kategorie": "Luft-, Raumfahrt & Rüstung"
+    },
+    {
+      "symbol": "LIN",
+      "name": "Linde",
+      "typ": "aktie",
+      "kategorie": "Rohstoffe & Chemie"
+    },
+    {
+      "symbol": "FCX",
+      "name": "Freeport-McMoRan",
+      "typ": "aktie",
+      "kategorie": "Rohstoffe & Chemie"
+    },
+    {
+      "symbol": "AI.PA",
+      "name": "Air Liquide",
+      "typ": "aktie",
+      "kategorie": "Rohstoffe & Chemie"
+    },
+    {
+      "symbol": "RIO.L",
+      "name": "Rio Tinto",
+      "typ": "aktie",
+      "kategorie": "Rohstoffe & Chemie"
+    },
+    {
+      "symbol": "NFLX",
+      "name": "Netflix",
+      "typ": "aktie",
+      "kategorie": "Telekom & Medien"
+    },
+    {
+      "symbol": "DTE.DE",
+      "name": "Deutsche Telekom",
+      "typ": "aktie",
+      "kategorie": "Telekom & Medien"
+    },
+    {
+      "symbol": "TMUS",
+      "name": "T-Mobile US",
+      "typ": "aktie",
+      "kategorie": "Telekom & Medien"
+    },
+    {
+      "symbol": "DIS",
+      "name": "Walt Disney",
+      "typ": "aktie",
+      "kategorie": "Telekom & Medien"
+    },
+    {
+      "symbol": "PLD",
+      "name": "Prologis",
+      "typ": "aktie",
+      "kategorie": "Immobilien & Logistik"
+    },
+    {
+      "symbol": "UNP",
+      "name": "Union Pacific",
+      "typ": "aktie",
+      "kategorie": "Immobilien & Logistik"
+    },
+    {
+      "symbol": "AMT",
+      "name": "American Tower",
+      "typ": "aktie",
+      "kategorie": "Immobilien & Logistik"
+    },
+    {
+      "symbol": "DHL.DE",
+      "name": "DHL Group",
+      "typ": "aktie",
+      "kategorie": "Immobilien & Logistik"
+    },
+    {
+      "symbol": "ANT",
+      "name": "Anthropic, PBC",
+      "typ": "aktie",
+      "kategorie": "KI-Infrastruktur"
+    }
   ]
 }
